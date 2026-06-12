@@ -279,7 +279,7 @@ spec:
           averageUtilization: 60
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 15
+      stabilizationWindowSeconds: 30
       selectPolicy: Max
       policies:
         - type: Pods
