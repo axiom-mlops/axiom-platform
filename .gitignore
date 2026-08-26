@@ -107,3 +107,6 @@ logs/
 **/.DS_Store
 axiom-aiops/
 aiops/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
