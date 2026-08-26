@@ -1,14 +1,21 @@
-# SRE Demo Platform — Master Edition
+# axiom-platform — reliability substrate for agentic AIOps
 
-> A production-grade SRE learning platform running on Kubernetes (Docker Desktop), featuring the Google Online Boutique microservices app instrumented with a full LGTM observability stack, HPA, chaos readiness, and load testing harness.
+> Kubernetes microservices platform with a full LGTM observability stack, HPA autoscaling,
+> chaos readiness, and a load-testing harness — built as the environment that autonomous
+> incident-response agents run against.
 
-> **Agentic AIOps layer:** [axiom-aiops](https://github.com/axiom-mlops/axiom-aiops) — autonomous
-> incident-response agents built on this platform. An alert drives a full lifecycle: evidence sweep
-> across Prometheus/Loki/Kubernetes → structured root cause → a proposed fix from a whitelisted
-> action space → **human approval gate** → scoped execution → signal verification → a runbook the
-> agent writes from its own audit trail. Working demo and golden-scenario tests.
->
-> Design reasoning and delivery status: [docs/architecture/](docs/architecture/).
+**The agent layer:** [axiom-aiops](https://github.com/axiom-mlops/axiom-aiops) — an alert drives a
+full lifecycle: evidence sweep across Prometheus/Loki/Kubernetes → structured root cause → a
+proposed fix from a whitelisted action space → **human approval gate** → scoped execution →
+signal verification → a runbook the agent writes from its own audit trail. Working demo and
+golden-scenario tests.
+
+**The seam between them** lives in [`aiops/`](aiops/): the PrometheusRule that fires the alert the
+agent diagnoses, the Alertmanager route that delivers it, and the RBAC that bounds what the
+executor can touch. The whitelisted action space is what the agent *will* do; the Role is what it
+*can* do — `kubectl auth can-i patch hpa` returns yes, `delete deployment` and `get secrets` return no.
+
+Design reasoning and per-slice delivery status: [`docs/architecture/`](docs/architecture/).
 
 [![CI — Manifest Validation](https://github.com/axiom-sre/sre-demo-platform/actions/workflows/ci.yaml/badge.svg)](https://github.com/axiom-sre/sre-demo-platform/actions/workflows/ci.yaml)
 [![Stack](https://img.shields.io/badge/stack-LGTM-orange)](https://grafana.com/oss/)
