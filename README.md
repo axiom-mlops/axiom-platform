@@ -52,6 +52,11 @@ Design reasoning and per-slice delivery status: [`docs/architecture/`](docs/arch
 ## 🗂️ Repo Layout
 
 ```
+aiops/                          # seam between the platform and the agent layer
+├── alerts/                     # PrometheusRule the agent consumes
+├── alerting/                   # Alertmanager route to the agent webhook
+└── rbac/                       # ServiceAccount + Role bounding the executor
+
 k8s/
 ├── boutique/
 │   ├── boutique.yaml          # All 11 boutique services + Redis
@@ -95,8 +100,8 @@ k8s/
 ### First-time setup (once per machine)
 
 ```bash
-git clone git@github.com:axiom-sre/sre-demo-platform.git
-cd sre-demo-platform/k8s
+git clone git@github.com:axiom-mlops/axiom-platform.git
+cd axiom-platform/k8s
 bash scripts/bootstrap.sh
 ```
 
@@ -200,13 +205,13 @@ Tempo's ingester WAL flush + block compaction takes 15-30s under load. SIGTERM d
 ## 🗺️ Roadmap
 
 - [ ] Chaos Engineering (Chaos Mesh / LitmusChaos)
-- [ ] Alerting rules (Prometheus alertmanager)
-- [ ] PagerDuty / Slack alert routing
+- [x] Alerting rules (Prometheus) — `aiops/alerts/`
+- [x] Alert routing to the agent + on-call — `aiops/alerting/`
 - [ ] SLO burn rate alerts (Sloth)
 - [ ] Distributed load testing (k6 operator)
 - [ ] GitOps (FluxCD / ArgoCD)
 - [ ] Multi-cluster simulation (kind)
-- [ ] Runbook automation
+- [x] Runbook automation — agent writes runbooks from its audit trail
 
 ---
 
