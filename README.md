@@ -1,4 +1,4 @@
-# axiom-platform — reliability substrate for agentic AIOps
+# axiom-platform: Reliability substrate for agentic AIOps
 
 ## The problem
 
@@ -9,13 +9,13 @@ MTTR is revenue on any path that touches checkout.
 
 Rule-based automation does not close it. PagerDuty routes, threshold alerts, and
 restart scripts handle failures someone already anticipated. They cannot reason across
-signals about a failure mode nobody wrote a rule for — which is precisely the class of
+signals about a failure mode nobody wrote a rule for which is precisely the class of
 incident that consumes the 90 minutes.
 
 The concrete instance this project is built around: a service that is **memory-bound
 under load while its HPA scales on CPU only**. Memory climbs toward the pod limit, CPU
 stays under the autoscaling target, no scale-out happens, and pods trend toward
-OOMKill — while the dashboard for the metric the autoscaler watches stays green. No
+OOMKill while the dashboard for the metric the autoscaler watches stays green. No
 single signal is alarming. The diagnosis lives in the *correlation*, which is exactly
 the part that costs an engineer an hour at 3am.
 
@@ -31,11 +31,11 @@ Alertmanager alert  (aiops/alerts/)
  OBSERVE    evidence sweep: memory vs limit, CPU vs request, HPA spec, error logs
       ▼
  DIAGNOSE   structured root cause + confidence + blast radius, validated into a
-      │     typed contract — low confidence escalates instead of guessing
+      │     typed contract low confidence escalates instead of guessing
       ▼
  PROPOSE    a fix from a whitelisted action space, never a generated command
       ▼
- GATE       human approval — the act-plane is structurally unreachable without it
+ GATE       human approval the act-plane is structurally unreachable without it
       ▼
  EXECUTE    scoped Kubernetes patch under a Role that permits HPA writes and nothing else
       ▼
@@ -68,7 +68,7 @@ with production.
 ### Modeled, not yet measured
 
 The numbers below are a **worked model with stated assumptions**, not observations.
-They exist to show the auditing method, which is the portable artifact — the figures
+They exist to show the auditing method, which is the portable artifact the figures
 themselves would be re-derived per environment.
 
 | Quantity | Human-only | With agent | Assumption |
@@ -80,14 +80,14 @@ themselves would be re-derived per environment.
 **Method, once the agent runs against real incidents:** instrument each loop stage for
 duration and outcome; price on-call time and revenue-per-minute of the affected path;
 cohort-compare a quarter of incidents before and after. Agent telemetry lands in the
-same Grafana stack it diagnoses — see
+same Grafana stack it diagnoses, see
 [ADR-005](docs/architecture/ADR-005-value-audit.md).
 
 ### Honest status
 
 The loop, its safety properties, and the cluster integration are shipped and tested.
 The live model backend, RAG over incident history, and the fine-tuned on-prem SLM are
-designed and documented, not built — every slice is marked in
+designed and documented, not built every slice is marked in
 [ROADMAP.md](docs/architecture/ROADMAP.md). Safety scaffolding was built first on
 purpose: the backend swaps in behind a Protocol, and model quality only matters once
 the surrounding system can absorb a wrong answer.
@@ -97,7 +97,7 @@ the surrounding system can absorb a wrong answer.
 ## The platform underneath
 
 Kubernetes microservices platform with a full LGTM observability stack, HPA autoscaling,
-chaos readiness, and a load-testing harness — the environment the agents run against.
+chaos readiness, and a load-testing harness the environment the agents run against.
 
 [![CI — Manifest Validation](https://github.com/axiom-sre/sre-demo-platform/actions/workflows/ci.yaml/badge.svg)](https://github.com/axiom-sre/sre-demo-platform/actions/workflows/ci.yaml)
 [![Stack](https://img.shields.io/badge/stack-LGTM-orange)](https://grafana.com/oss/)
@@ -113,7 +113,7 @@ chaos readiness, and a load-testing harness — the environment the agents run a
 │  namespace: boutique                                    │
 │  Google Online Boutique (11 microservices)              │
 │  frontend · cart · checkout · product · recommend ...   │
-│  HPA on 6 services — scales to 1000+ VU                │
+│  HPA on 6 services scales to 1000+ VU                │
 └────────────────────┬────────────────────────────────────┘
                      │ OTLP traces · pod logs · /metrics
 ┌────────────────────▼────────────────────────────────────┐
@@ -124,7 +124,7 @@ chaos readiness, and a load-testing harness — the environment the agents run a
 │    ├─ Metrics → Prometheus (2.51) ← metrics backend    │
 │    └─ Logs    → Loki (3.0.0)      ← log backend        │
 │                                                         │
-│  Grafana (10.x) — 3 pre-loaded dashboards              │
+│  Grafana (10.x): 3 pre-loaded dashboards              │
 │    ├─ Golden Signals                                    │
 │    ├─ Pod & Platform Stats                              │
 │    └─ SLI / SLO / Error Budget                         │
@@ -231,7 +231,7 @@ k6 run --env BASE_URL=$BASE_URL scripts/load-test_10vusers.js
 # Moderate load (100 VU)
 k6 run --env BASE_URL=$BASE_URL scripts/load-test_100vusers.js
 
-# Full load — triggers HPA scale-out (1000 VU)
+# Full load triggers HPA scale-out (1000 VU)
 k6 run --env BASE_URL=$BASE_URL scripts/load-test_1000vusers.js
 
 # Watch HPA react in real time (separate terminal)
@@ -293,7 +293,7 @@ Tempo's ingester WAL flush + block compaction takes 15-30s under load. SIGTERM d
 - [ ] Distributed load testing (k6 operator)
 - [ ] GitOps (FluxCD / ArgoCD)
 - [ ] Multi-cluster simulation (kind)
-- [x] Runbook automation — agent writes runbooks from its audit trail
+- [x] Runbook automation: agent writes runbooks from its audit trail
 
 ---
 
