@@ -1,21 +1,103 @@
 # axiom-platform — reliability substrate for agentic AIOps
 
-> Kubernetes microservices platform with a full LGTM observability stack, HPA autoscaling,
-> chaos readiness, and a load-testing harness — built as the environment that autonomous
-> incident-response agents run against.
+## The problem
 
-**The agent layer:** [axiom-aiops](https://github.com/axiom-mlops/axiom-aiops) — an alert drives a
-full lifecycle: evidence sweep across Prometheus/Loki/Kubernetes → structured root cause → a
-proposed fix from a whitelisted action space → **human approval gate** → scoped execution →
-signal verification → a runbook the agent writes from its own audit trail. Working demo and
-golden-scenario tests.
+Incident response is the most expensive toil in operations, and the expensive part is
+not the fix. It is the 30–90 minutes an on-call engineer spends correlating metrics,
+logs, and configuration before anyone knows *what* to fix. That interval is MTTR, and
+MTTR is revenue on any path that touches checkout.
 
-**The seam between them** lives in [`aiops/`](aiops/): the PrometheusRule that fires the alert the
-agent diagnoses, the Alertmanager route that delivers it, and the RBAC that bounds what the
-executor can touch. The whitelisted action space is what the agent *will* do; the Role is what it
-*can* do — `kubectl auth can-i patch hpa` returns yes, `delete deployment` and `get secrets` return no.
+Rule-based automation does not close it. PagerDuty routes, threshold alerts, and
+restart scripts handle failures someone already anticipated. They cannot reason across
+signals about a failure mode nobody wrote a rule for — which is precisely the class of
+incident that consumes the 90 minutes.
 
-Design reasoning and per-slice delivery status: [`docs/architecture/`](docs/architecture/).
+The concrete instance this project is built around: a service that is **memory-bound
+under load while its HPA scales on CPU only**. Memory climbs toward the pod limit, CPU
+stays under the autoscaling target, no scale-out happens, and pods trend toward
+OOMKill — while the dashboard for the metric the autoscaler watches stays green. No
+single signal is alarming. The diagnosis lives in the *correlation*, which is exactly
+the part that costs an engineer an hour at 3am.
+
+## The solution
+
+An agent that performs the correlation-and-diagnosis phase in seconds and proposes the
+fix, while a human stays accountable for the decision to change production.
+
+```
+Alertmanager alert  (aiops/alerts/)
+      │
+      ▼
+ OBSERVE    evidence sweep: memory vs limit, CPU vs request, HPA spec, error logs
+      ▼
+ DIAGNOSE   structured root cause + confidence + blast radius, validated into a
+      │     typed contract — low confidence escalates instead of guessing
+      ▼
+ PROPOSE    a fix from a whitelisted action space, never a generated command
+      ▼
+ GATE       human approval — the act-plane is structurally unreachable without it
+      ▼
+ EXECUTE    scoped Kubernetes patch under a Role that permits HPA writes and nothing else
+      ▼
+ VERIFY     did the signals actually recover? applied-but-ineffective is surfaced
+      ▼
+ RUNBOOK    written from the audit trail, for the next human
+```
+
+Agent implementation: **[axiom-aiops](https://github.com/axiom-mlops/axiom-aiops)**.
+Cluster-side integration: **[`aiops/`](aiops/)**. Design reasoning and per-slice
+delivery status: **[`docs/architecture/`](docs/architecture/)**.
+
+## Results
+
+Split deliberately into what is measured and what is modeled. The distinction is the
+point: an AIOps project that cannot tell you which is which is not ready to be trusted
+with production.
+
+### Measured today
+
+| Result | Evidence |
+|---|---|
+| Full incident lifecycle runs end to end on the HPA memory blind-spot scenario | [`demo/transcript.md`](https://github.com/axiom-mlops/axiom-aiops/blob/main/demo/transcript.md) |
+| Agent produces a correct root cause and a correct remediation for that scenario | same transcript, `confidence=high` |
+| Gate denial results in zero cluster writes; low confidence escalates instead of acting | golden-scenario tests, green in CI |
+| Executor cannot exceed its permission boundary | `kubectl auth can-i patch hpa` → yes; `delete deployment`, `get secrets` → no |
+| Runbook is generated from the audit trail, not hand-written | [agent-generated runbook](https://github.com/axiom-mlops/axiom-aiops/blob/main/docs/runbooks/agent-generated-hpa-memory-blindspot.md) |
+| Platform sustains 1,000 VU with HPA scale-out under load | `scripts/load-test_1000vusers.js`, Grafana dashboards |
+
+### Modeled, not yet measured
+
+The numbers below are a **worked model with stated assumptions**, not observations.
+They exist to show the auditing method, which is the portable artifact — the figures
+themselves would be re-derived per environment.
+
+| Quantity | Human-only | With agent | Assumption |
+|---|---|---|---|
+| Time to diagnosis | 30–90 min | seconds | Correlation is the dominant term; the agent's sweep is fixed-cost |
+| Time to safe remediation | diagnosis + drafting + review | diagnosis + one approval | Patch is pre-vetted and whitelisted |
+| Knowledge capture | postmortem days later, or never | runbook at resolution time | Generated from the audit trail |
+
+**Method, once the agent runs against real incidents:** instrument each loop stage for
+duration and outcome; price on-call time and revenue-per-minute of the affected path;
+cohort-compare a quarter of incidents before and after. Agent telemetry lands in the
+same Grafana stack it diagnoses — see
+[ADR-005](docs/architecture/ADR-005-value-audit.md).
+
+### Honest status
+
+The loop, its safety properties, and the cluster integration are shipped and tested.
+The live model backend, RAG over incident history, and the fine-tuned on-prem SLM are
+designed and documented, not built — every slice is marked in
+[ROADMAP.md](docs/architecture/ROADMAP.md). Safety scaffolding was built first on
+purpose: the backend swaps in behind a Protocol, and model quality only matters once
+the surrounding system can absorb a wrong answer.
+
+---
+
+## The platform underneath
+
+Kubernetes microservices platform with a full LGTM observability stack, HPA autoscaling,
+chaos readiness, and a load-testing harness — the environment the agents run against.
 
 [![CI — Manifest Validation](https://github.com/axiom-sre/sre-demo-platform/actions/workflows/ci.yaml/badge.svg)](https://github.com/axiom-sre/sre-demo-platform/actions/workflows/ci.yaml)
 [![Stack](https://img.shields.io/badge/stack-LGTM-orange)](https://grafana.com/oss/)
