@@ -2,6 +2,14 @@
 
 > A production-grade SRE learning platform running on Kubernetes (Docker Desktop), featuring the Google Online Boutique microservices app instrumented with a full LGTM observability stack, HPA, chaos readiness, and load testing harness.
 
+> **Agentic AIOps layer:** [axiom-aiops](https://github.com/axiom-mlops/axiom-aiops) — autonomous
+> incident-response agents built on this platform. An alert drives a full lifecycle: evidence sweep
+> across Prometheus/Loki/Kubernetes → structured root cause → a proposed fix from a whitelisted
+> action space → **human approval gate** → scoped execution → signal verification → a runbook the
+> agent writes from its own audit trail. Working demo and golden-scenario tests.
+>
+> Design reasoning and delivery status: [docs/architecture/](docs/architecture/).
+
 [![CI — Manifest Validation](https://github.com/axiom-sre/sre-demo-platform/actions/workflows/ci.yaml/badge.svg)](https://github.com/axiom-sre/sre-demo-platform/actions/workflows/ci.yaml)
 [![Stack](https://img.shields.io/badge/stack-LGTM-orange)](https://grafana.com/oss/)
 [![k8s](https://img.shields.io/badge/kubernetes-docker--desktop-blue)](https://www.docker.com/products/docker-desktop/)
