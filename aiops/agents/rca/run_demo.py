@@ -5,6 +5,8 @@
 Runs against captured platform fixtures by default so it works anywhere.
 Point ReadTools/ActTools at the live cluster to run it for real.
 """
+from pathlib import Path
+
 from agents.rca.contracts import Alert
 from agents.rca.loop import run_incident, write_runbook
 
@@ -38,7 +40,10 @@ def main() -> None:
             print(f"           - {c}")
 
     runbook = write_runbook(record)
-    path = "docs/runbooks/agent-generated-hpa-memory-blindspot.md"
+    # repo root is three levels up from agents/rca/
+    root = Path(__file__).resolve().parents[3]
+    path = root / "docs/runbooks/agent-generated-hpa-memory-blindspot.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         f.write(runbook + "\n")
     print(f"[RUNBOOK]  written to {path}")
