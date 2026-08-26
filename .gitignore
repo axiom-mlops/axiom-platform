@@ -105,3 +105,4 @@ logs/
 *.old
 .DS_Store
 **/.DS_Store
+axiom-aiops/

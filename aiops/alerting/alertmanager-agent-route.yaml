@@ -1,0 +1,48 @@
+# Routing: which alerts reach the agent, and which never do.
+#
+# The `aiops_eligible: "true"` label is an explicit allowlist, not a default.
+# An alert reaches the agent because someone decided it should -- the same
+# opt-in principle as the whitelisted action space on the other side of the
+# loop. Everything else pages a human directly, unchanged.
+#
+# `continue: true` on the agent route is the important line: the agent
+# receives a copy, the human route still fires. The agent is an accelerator
+# on the diagnosis path, not an interception of the page.
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: aiops-agent-route
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: axiom-aiops
+spec:
+  route:
+    receiver: oncall-default
+    groupBy: ["alertname", "namespace", "service"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    routes:
+      - receiver: aiops-rca-agent
+        matchers:
+          - name: aiops_eligible
+            value: "true"
+        # Human notification is unaffected by agent involvement.
+        continue: true
+        groupWait: 0s
+
+  receivers:
+    - name: aiops-rca-agent
+      webhookConfigs:
+        - url: http://aiops-rca-agent.boutique.svc.cluster.local:8080/alert
+          sendResolved: true
+          # Diagnosis is read-only and gated downstream, so a retry is safe.
+          maxAlerts: 0
+    - name: oncall-default
+      # PagerDuty integration lives in the platform's existing secret;
+      # the agent's approval gate raises its incident through the same key.
+      pagerdutyConfigs:
+        - routingKey:
+            name: pagerduty-routing-key
+            key: key

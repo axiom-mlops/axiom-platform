@@ -1,0 +1,65 @@
+# The alert the RCA agent consumes.
+#
+# This rule and the agent's golden-scenario test describe the same failure:
+# a service that is memory-bound under load while its HPA scales on CPU only.
+# Memory climbs toward the pod limit, CPU stays under the autoscaling target,
+# no scale-out happens, and pods trend toward OOMKill -- while the metric the
+# autoscaler watches stays green.
+#
+# Labels here are the agent's input contract. `service` and `namespace` drive
+# the evidence sweep; `severity` drives routing (see ../alerting/).
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aiops-saturation-alerts
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: axiom-aiops
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: saturation.rules
+      rules:
+        - alert: ContainerMemoryNearLimit
+          expr: |
+            (
+              container_memory_working_set_bytes{namespace="boutique", container!="", container!="POD"}
+              /
+              on(namespace, pod, container)
+              kube_pod_container_resource_limits{namespace="boutique", resource="memory"}
+            ) > 0.90
+          for: 10m
+          labels:
+            severity: page
+            # Consumed directly by the agent's Alert contract.
+            service: "{{ $labels.container }}"
+            aiops_eligible: "true"
+          annotations:
+            summary: >-
+              {{ $labels.container }} working set above 90% of limit for 10m
+            description: >-
+              Pod {{ $labels.pod }} is at {{ $value | humanizePercentage }} of its
+              memory limit. Check whether the HPA targets the binding resource
+              before adjusting replica counts or limits.
+            runbook_url: https://github.com/axiom-mlops/axiom-aiops/blob/main/docs/runbooks/agent-generated-hpa-memory-blindspot.md
+
+        # Detects the blind spot itself rather than its symptom: an HPA whose
+        # only metric target is CPU on a workload under memory pressure.
+        - alert: HPAMissingBindingResourceTarget
+          expr: |
+            (
+              kube_horizontalpodautoscaler_spec_target_metric{namespace="boutique", metric_name="cpu"} == 1
+              unless on(namespace, horizontalpodautoscaler)
+              kube_horizontalpodautoscaler_spec_target_metric{namespace="boutique", metric_name="memory"}
+            )
+          for: 15m
+          labels:
+            severity: ticket
+            aiops_eligible: "true"
+          annotations:
+            summary: >-
+              HPA {{ $labels.horizontalpodautoscaler }} scales on CPU only
+            description: >-
+              No memory target configured. If this workload is memory-bound,
+              the autoscaler cannot react to the resource that actually saturates.
