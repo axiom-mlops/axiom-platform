@@ -6,12 +6,20 @@ Why: LLM output is untrusted input. Validating it into a schema at the
 boundary means a malformed model response fails loudly at parse time,
 not silently at kubectl-patch time. This is the same principle as
 validating user input at an API edge.
+
+Params hole fix: the action was already constrained to a whitelist (a
+Literal enum), but `params` was a bare dict, so the model could invent
+key names and values. A tight action guarding a loose payload is not a
+guardrail. Every action now has a typed params contract with extra keys
+forbidden and numeric bounds enforced, wired in via a model_validator.
+The generalizable rule: constrain every field the schema can constrain;
+each unconstrained field is a place the model will drift.
 """
 from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Alert(BaseModel):
@@ -43,12 +51,58 @@ class Diagnosis(BaseModel):
     blast_radius: str = Field(description="What breaks if this is left alone")
 
 
+# --------------------------------------------------------------------------- #
+# Per-action params contracts. extra="forbid" rejects invented keys; numeric   #
+# bounds reject nonsense values. These are the payload half of the whitelist.  #
+# --------------------------------------------------------------------------- #
+class HpaAddMemoryTargetParams(BaseModel):
+    """Params for patch_hpa_add_memory_target.
+
+    ADDITIVE and NON-DESTRUCTIVE. The model supplies ONLY the new memory target.
+    The existing CPU target is current cluster state: it is read from the live
+    HPA at execute time and preserved, never a value the model may set. HPA v2
+    scales on the max desired replicas across metrics, so both targets end up
+    live and a CPU-bound spike still scales; but "add a memory target" must not
+    silently rewrite the operator's existing CPU threshold. Same principle as
+    pinning target/namespace: the model decides the new thing, the system
+    supplies observed facts. cpu is therefore NOT a settable param, and
+    extra="forbid" means an attempt to set it is rejected at the boundary.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    memory_target_average_utilization: int = Field(ge=1, le=100)
+
+
+class ScaleDeploymentParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    replicas: int = Field(ge=1, le=100)
+
+
+class RollbackDeploymentParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    to_revision: Optional[int] = Field(default=None, ge=1)  # None = previous revision
+
+
+# The registry is the single source of truth mapping an action to its payload
+# contract. Adding a new action means adding a params model here and to the
+# ProposedPatch.action Literal, and both halves of the guardrail move together.
+PARAMS_BY_ACTION: dict[str, type[BaseModel]] = {
+    "patch_hpa_add_memory_target": HpaAddMemoryTargetParams,
+    "scale_deployment": ScaleDeploymentParams,
+    "rollback_deployment": RollbackDeploymentParams,
+}
+
+
 class ProposedPatch(BaseModel):
     """A concrete, human-reviewable remediation. Never free text.
 
-    The agent may only propose actions from a whitelisted action space.
-    This is the core safety property: the LLM chooses *which* known-safe
-    action fits, it does not invent arbitrary kubectl commands.
+    The agent may only propose actions from a whitelisted action space, AND
+    the params for that action must match the registered per-action contract.
+    The LLM chooses WHICH known-safe action fits and supplies its parameters;
+    it cannot invent an action, and it cannot invent parameter keys or values.
     """
 
     action: Literal["patch_hpa_add_memory_target", "scale_deployment", "rollback_deployment"]
@@ -57,6 +111,20 @@ class ProposedPatch(BaseModel):
     params: dict
     rationale: str
     risk: Literal["low", "medium", "high"]
+
+    @model_validator(mode="after")
+    def _validate_params_for_action(self) -> "ProposedPatch":
+        """Validate params against the contract for the chosen action, then
+        normalize to the canonical typed dict. Unknown keys or out-of-bounds
+        values raise here, at the boundary, before anything reaches the act
+        plane. Assignment does not re-trigger this validator (validate_assignment
+        is off by default), so the normalization is safe."""
+        contract = PARAMS_BY_ACTION.get(self.action)
+        if contract is None:
+            raise ValueError(f"no params contract registered for action {self.action!r}")
+        validated = contract.model_validate(self.params)  # extra=forbid + bounds
+        self.params = validated.model_dump()
+        return self
 
 
 class GateDecision(BaseModel):
@@ -72,7 +140,7 @@ class VerificationResult(BaseModel):
 
 
 class IncidentRecord(BaseModel):
-    """Everything the loop produced for one incident — feeds the runbook writer."""
+    """Everything the loop produced for one incident, feeds the runbook writer."""
 
     alert: Alert
     diagnosis: Diagnosis

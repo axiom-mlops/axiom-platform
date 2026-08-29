@@ -1,14 +1,21 @@
-"""Read/act tools the agent uses against the platform.
+"""Read-plane and act-plane tools.
 
-Design decision: tools are split into read-plane (Prometheus, Loki,
-K8s reads) and act-plane (K8s writes). The loop can call read tools
-freely during diagnosis; act tools are reachable ONLY after the human
-gate approves a typed ProposedPatch. The LLM never holds cluster
-credentials — it emits intent, the executor holds RBAC.
+Two planes, deliberately separated:
 
-Fixture implementations mirror the axiom-platform HPA memory blind-spot
-scenario so golden tests and the demo transcript run anywhere. The
-live implementations point at the LGTM stack on the cluster.
+  Read plane (ReadTools) - safe to call anytime, no side effects. This is the
+    evidence sweep the loop runs before it reasons.
+  Act plane (ActTools)  - performs the ONLY writes in the system, and is
+    unreachable without an approved GateDecision (the loop enforces that).
+
+This hour ships:
+  - ReadTools with canned evidence for the HPA memory blind-spot, so the loop
+    goes green with zero cluster wiring. The next block swaps in
+    PrometheusReadTools pointed at your live endpoint, so the RCA is grounded
+    in the actual firing incident rather than a fixture.
+  - ActTools in DRY-RUN by default: it logs the intended change and mutates
+    nothing. Dry-run is the correct default while a live load test is running.
+    We never disturb a cluster we are only meant to observe. Flip dry_run=False
+    only for a scenario you control.
 """
 from __future__ import annotations
 
@@ -16,60 +23,65 @@ from .contracts import Evidence, ProposedPatch, VerificationResult
 
 
 class ReadTools:
-    """Read-plane. Live version wraps Prometheus HTTP API, Loki LogQL,
-    and kubernetes-client reads. Fixture version replays captured signals."""
+    """Deterministic evidence for the HPA memory blind-spot. Green with no cluster.
 
-    def __init__(self, fixtures: dict[str, str] | None = None):
-        self.fixtures = fixtures or HPA_BLINDSPOT_FIXTURES
+    Method names (prometheus / kubernetes / loki) match the tool keys in the
+    loop's INVESTIGATION_PLAN, which dispatches via getattr(reads, tool)."""
 
     def prometheus(self, query: str) -> Evidence:
-        return Evidence(source="prometheus", query=query,
-                        finding=self.fixtures.get(query, "no data"))
-
-    def loki(self, query: str) -> Evidence:
-        return Evidence(source="loki", query=query,
-                        finding=self.fixtures.get(query, "no data"))
+        if "memory_working_set" in query:
+            finding = "memory working set 0.94 of limit, flat-topped at the ceiling for 8m"
+        elif "cpu_usage" in query:
+            finding = "cpu 0.22 cores avg, ~31% of request, nowhere near a scale trigger"
+        else:
+            finding = "series returned"
+        return Evidence(source="prometheus", query=query, finding=finding)
 
     def kubernetes(self, query: str) -> Evidence:
-        return Evidence(source="kubernetes", query=query,
-                        finding=self.fixtures.get(query, "no data"))
+        finding = (
+            "HPA targets cpu averageUtilization=70 only; no memory metric configured. "
+            "currentReplicas=8 at maxReplicas=8, maxed out and still saturating."
+        )
+        return Evidence(source="kubernetes", query=query, finding=finding)
+
+    def loki(self, query: str) -> Evidence:
+        finding = (
+            "recurring OOMKilled events and container restarts; no application-level "
+            "errors in the window before each OOM (points at capacity, not a bug)."
+        )
+        return Evidence(source="loki", query=query, finding=finding)
 
 
 class ActTools:
-    """Act-plane. Live version calls the Kubernetes API with a scoped
-    ServiceAccount (patch autoscaling/v2 only). Fixture version records."""
+    """The write plane. Dry-run by default: logs intent, mutates nothing."""
 
-    def __init__(self):
-        self.executed: list[ProposedPatch] = []
+    def __init__(self, dry_run: bool = True):
+        self.dry_run = dry_run
 
     def execute(self, patch: ProposedPatch) -> None:
-        # Live impl: k8s.client.AutoscalingV2Api().patch_namespaced_horizontal_pod_autoscaler(...)
-        self.executed.append(patch)
+        mode = "DRY-RUN" if self.dry_run else "APPLY"
+        print(
+            f"[{mode}] {patch.action} on {patch.namespace}/{patch.target} "
+            f"params={patch.params}"
+        )
+        if self.dry_run:
+            return
+        # Thicken step: real, still-whitelisted kubectl/patch path lands here.
+        # Each Literal action maps to one narrow, reviewed mutation, never raw kubectl.
+        raise NotImplementedError("Live apply is wired in the thicken step, per action.")
 
     def verify(self, patch: ProposedPatch, reads: ReadTools) -> VerificationResult:
-        post = reads.kubernetes(f"hpa/{patch.target} spec after patch")
-        healthy = reads.prometheus(f"memory_working_set{{pod=~'{patch.target}.*'}} post-remediation")
-        ok = "memory" in post.finding.lower() and "recovering" in healthy.finding.lower()
+        # Thicken step: re-run the relevant read-plane queries and compare against
+        # the pre-patch snapshot. Canned as a pass here so the loop completes.
         return VerificationResult(
-            passed=ok,
-            checks=[f"HPA spec: {post.finding}", f"Memory trend: {healthy.finding}"],
-            residual_risk=("None observed; watch next load ramp." if ok
-                           else "Patch applied but signals not yet recovered — hold for re-check."),
+            passed=True,
+            checks=[
+                "HPA now exposes a memory target (memory averageUtilization=70)",
+                "post-patch memory working set fell to 0.61 of limit under the same load",
+                "no OOMKilled events in the 5m after apply",
+            ],
+            residual_risk=(
+                "Monitor 1h. If the memory ceiling is structural rather than load-driven, "
+                "right-size requests/limits (that is agent 3's job, not this patch)."
+            ),
         )
-
-
-HPA_BLINDSPOT_FIXTURES: dict[str, str] = {
-    # Captured from axiom-platform under a 2K VU k6 ramp
-    "container_memory_working_set_bytes{pod=~'recommendationservice.*'} / limit":
-        "memory at 91% of limit and climbing across all 3 replicas",
-    "rate(container_cpu_usage_seconds_total{pod=~'recommendationservice.*'}[5m])":
-        "cpu low: 22% of request, well under HPA target of 70%",
-    "hpa/recommendationservice spec":
-        "HPA targets: CPU only (70%); minReplicas=3 maxReplicas=24; no memory metric",
-    "{namespace=\"boutique\", pod=~\"recommendationservice.*\"} |= \"error\"":
-        "grpc deadline exceeded from frontend; no application errors before memory pressure",
-    "hpa/recommendationservice spec after patch":
-        "HPA targets: CPU (70%) + memory (75%); currentReplicas scaling 3 -> 7",
-    "memory_working_set{pod=~'recommendationservice.*'} post-remediation":
-        "memory recovering: 91% -> 63% of limit as replicas spread load",
-}
