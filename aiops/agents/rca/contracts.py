@@ -49,6 +49,12 @@ class Diagnosis(BaseModel):
     confidence: Literal["high", "medium", "low"]
     evidence: list[Evidence]
     blast_radius: str = Field(description="What breaks if this is left alone")
+    prevention: list[str] = Field(
+        default_factory=list,
+        description="How to stop this alert class recurring; authored by the "
+        "diagnosing specialist so the runbook footer matches the incident, not a "
+        "hardcoded template. Empty is allowed (the renderer falls back).",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -86,6 +92,23 @@ class RollbackDeploymentParams(BaseModel):
     to_revision: Optional[int] = Field(default=None, ge=1)  # None = previous revision
 
 
+class PatchDeploymentResourcesParams(BaseModel):
+    """Params for patch_deployment_resources (the right-sizing action).
+
+    Right-sizing aligns requests (and optionally limits) to observed usage. It
+    changes reserved capacity, not replica count, which is why it is a distinct
+    action from scale_deployment. Values are integers in millicores and MiB so
+    they are bounded and validated like every other action, rather than free
+    Kubernetes quantity strings the model could mangle."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cpu_request_millicores: int = Field(ge=1, le=64000)
+    memory_request_mib: int = Field(ge=1, le=131072)
+    cpu_limit_millicores: Optional[int] = Field(default=None, ge=1, le=64000)
+    memory_limit_mib: Optional[int] = Field(default=None, ge=1, le=131072)
+
+
 # The registry is the single source of truth mapping an action to its payload
 # contract. Adding a new action means adding a params model here and to the
 # ProposedPatch.action Literal, and both halves of the guardrail move together.
@@ -93,6 +116,7 @@ PARAMS_BY_ACTION: dict[str, type[BaseModel]] = {
     "patch_hpa_add_memory_target": HpaAddMemoryTargetParams,
     "scale_deployment": ScaleDeploymentParams,
     "rollback_deployment": RollbackDeploymentParams,
+    "patch_deployment_resources": PatchDeploymentResourcesParams,
 }
 
 
@@ -105,7 +129,12 @@ class ProposedPatch(BaseModel):
     it cannot invent an action, and it cannot invent parameter keys or values.
     """
 
-    action: Literal["patch_hpa_add_memory_target", "scale_deployment", "rollback_deployment"]
+    action: Literal[
+        "patch_hpa_add_memory_target",
+        "scale_deployment",
+        "rollback_deployment",
+        "patch_deployment_resources",
+    ]
     target: str
     namespace: str
     params: dict

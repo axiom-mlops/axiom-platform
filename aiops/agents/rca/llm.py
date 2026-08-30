@@ -71,6 +71,11 @@ class DeterministicBackend:
                 "so the saturation is self-reinforcing until the binding resource is "
                 "addressed."
             ),
+            prevention=[
+                "Confirm the binding resource (memory vs CPU) before touching replica counts.",
+                "Check the HPA targets cover the binding resource, not just CPU.",
+                "Horizontal scale beats limit raises for horizontally scalable services.",
+            ],
         )
 
     def propose(self, alert: Alert, diagnosis: Diagnosis) -> ProposedPatch:
@@ -231,4 +236,93 @@ class OllamaBackend:
         return self._ask_and_build(
             _PROPOSE_SYSTEM, user, _PROPOSE_SCHEMA, "proposed_patch",
             lambda d: ProposedPatch(target=alert.service, namespace=alert.namespace, **d),
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Specialist deterministic backends (agents 2 and 3). Same LLMBackend shape,   #
+# same contracts. The real-model path for these is Block B, added behind the   #
+# identical interface, exactly as the RCA agent already has.                    #
+# --------------------------------------------------------------------------- #
+class CanaryDeterministicBackend:
+    """Agent 2: canary verification. Decides promote vs roll back from the
+    canary's golden signals against baseline."""
+
+    def diagnose(self, alert: Alert, evidence: list[Evidence]) -> Diagnosis:
+        return Diagnosis(
+            root_cause=(
+                f"The canary revision of {alert.service} regresses against baseline: "
+                "canary 5xx ratio and p95 latency both exceed the promotion SLO gate. "
+                "The regression tracks the new revision, not load, so promoting it "
+                "would expose all traffic to the fault."
+            ),
+            confidence="high",
+            evidence=evidence,
+            blast_radius=(
+                f"Only the canary slice of {alert.service} traffic is affected now. "
+                "Promotion would widen the blast radius to 100% of users; the safe "
+                "direction is back, not forward."
+            ),
+            prevention=[
+                "Gate promotion on error-rate and latency SLOs, not just a soak timer.",
+                "Keep the canary weight low until the analysis run passes.",
+                "Ensure automated rollback triggers before a human is paged, not after.",
+            ],
+        )
+
+    def propose(self, alert: Alert, diagnosis: Diagnosis) -> ProposedPatch:
+        return ProposedPatch(
+            action="rollback_deployment",
+            target=alert.service,
+            namespace=alert.namespace,
+            params={"to_revision": None},  # None = last known-good revision
+            rationale=(
+                "The canary failed the SLO gate on error rate and latency. Roll back "
+                "to the last known-good revision before promotion widens the blast "
+                "radius. Rolling back is reversible and lower risk than shipping a "
+                "known-bad release."
+            ),
+            risk="medium",
+        )
+
+
+class RightSizingDeterministicBackend:
+    """Agent 3: right-sizing. Aligns requests to observed usage to cut waste."""
+
+    def diagnose(self, alert: Alert, evidence: list[Evidence]) -> Diagnosis:
+        return Diagnosis(
+            root_cause=(
+                f"{alert.service} reserves far more than it uses: 7-day p95 CPU is a "
+                "small fraction of the CPU request and p95 memory sits well under the "
+                "memory request, with peak still leaving ample headroom. The requests "
+                "were set defensively and never corrected, so the deployment holds "
+                "reserved capacity it does not need."
+            ),
+            confidence="high",
+            evidence=evidence,
+            blast_radius=(
+                "No user-facing impact. The cost is reserved-but-idle capacity that "
+                "worsens bin-packing and inflates node count and spend."
+            ),
+            prevention=[
+                "Set requests from observed p95 usage plus headroom, not from guesses.",
+                "Review requests-vs-usage on a schedule; usage drifts as traffic changes.",
+                "Lower requests with headroom, never straight to raw p95, to absorb spikes.",
+            ],
+        )
+
+    def propose(self, alert: Alert, diagnosis: Diagnosis) -> ProposedPatch:
+        return ProposedPatch(
+            action="patch_deployment_resources",
+            target=alert.service,
+            namespace=alert.namespace,
+            # Right-size to observed p95 plus ~30% headroom (millicores / MiB).
+            params={"cpu_request_millicores": 150, "memory_request_mib": 256},
+            rationale=(
+                "Align requests to observed p95 usage plus roughly 30% headroom, "
+                "reclaiming idle reserved capacity without risking CPU throttling or "
+                "OOM. Requests are lowered deliberately with headroom, not to the raw "
+                "p95, so a normal spike is still covered."
+            ),
+            risk="low",
         )
