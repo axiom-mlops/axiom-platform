@@ -94,14 +94,62 @@ class DeterministicBackend:
                 "Horizontal scale is preferred over raising limits for a "
                 "horizontally scalable service."
             ),
-            risk="low",
         )
 
 
 # --------------------------------------------------------------------------- #
 # Real model over the OpenAI-compatible contract (Ollama now, vLLM in prod).   #
+#                                                                             #
+# One backend, three specialists. Everything that differs between specialists #
+# lives in a ModelTask (the diagnosis framing, the proposal framing, and the  #
+# action enum the model may choose from). The call/parse/validate/retry       #
+# machinery below does NOT change per specialist. Narrowing the enum per       #
+# specialist is defense in depth: the canary agent's schema contains only     #
+# rollback_deployment, so even a confused model cannot emit another domain's  #
+# action from the canary seat. Routing chooses the specialist; the schema     #
+# bounds what that specialist can even propose.                               #
 # --------------------------------------------------------------------------- #
-_DIAGNOSE_SYSTEM = (
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ModelTask:
+    """Per-specialist configuration for the real-model backend."""
+    name: str
+    diagnose_system: str
+    propose_system: str
+    allowed_actions: tuple[str, ...]
+
+
+_DIAGNOSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "root_cause": {"type": "string"},
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "blast_radius": {"type": "string"},
+    },
+    "required": ["root_cause", "confidence", "blast_radius"],
+}
+
+
+def _propose_schema(allowed_actions: tuple[str, ...]) -> dict:
+    """Build the proposal schema for exactly the actions this specialist owns.
+    The enum is the whitelist; anything outside it is unrepresentable. Note there
+    is no `risk` field: risk is system-assigned by action (RISK_BY_ACTION in
+    contracts.py), not something the model gets to choose."""
+    return {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": list(allowed_actions)},
+            "params": {"type": "object"},
+            "rationale": {"type": "string"},
+        },
+        "required": ["action", "params", "rationale"],
+    }
+
+
+# --- Agent 1: RCA / autoscaling saturation ---------------------------------- #
+_RCA_DIAGNOSE = (
     "You are an SRE incident diagnostician. You receive a firing alert and a "
     "fixed sweep of evidence (metrics, HPA spec, logs). Reason about the ROOT "
     "cause, not the symptom. Explicitly distinguish the binding resource (what "
@@ -114,7 +162,7 @@ _DIAGNOSE_SYSTEM = (
     "supplied evidence; do not invent metrics."
 )
 
-_PROPOSE_SYSTEM = (
+_RCA_PROPOSE = (
     "You propose exactly ONE remediation, chosen only from the allowed action "
     "set in the schema enum. Respond with JSON only. Prefer the least-risk "
     "action that addresses the diagnosed binding resource.\n"
@@ -130,87 +178,194 @@ _PROPOSE_SYSTEM = (
     "by the system, not by you."
 )
 
-_DIAGNOSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "root_cause": {"type": "string"},
-        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
-        "blast_radius": {"type": "string"},
-    },
-    "required": ["root_cause", "confidence", "blast_radius"],
-}
+RCA_TASK = ModelTask(
+    name="rca-autoscaling",
+    diagnose_system=_RCA_DIAGNOSE,
+    propose_system=_RCA_PROPOSE,
+    # This specialist has real latitude: add a memory target, or scale, or roll
+    # back. The menu is small and every item is safe; the diagnosis chooses.
+    allowed_actions=("patch_hpa_add_memory_target", "scale_deployment",
+                     "rollback_deployment"),
+)
 
-_PROPOSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "action": {
-            "type": "string",
-            "enum": [
-                "patch_hpa_add_memory_target",
-                "scale_deployment",
-                "rollback_deployment",
-            ],
-        },
-        "params": {"type": "object"},
-        "rationale": {"type": "string"},
-        "risk": {"type": "string", "enum": ["low", "medium", "high"]},
-    },
-    "required": ["action", "params", "rationale", "risk"],
-}
+
+# --- Agent 2: canary verification ------------------------------------------- #
+_CANARY_DIAGNOSE = (
+    "You are an SRE analyzing a canary release against its baseline. You receive "
+    "a firing alert and a fixed sweep of evidence: canary-vs-baseline error "
+    "ratio, canary-vs-baseline p95 latency, rollout status, and canary logs. "
+    "Decide whether the canary is healthy enough to promote or is regressing. A "
+    "regression that tracks the new REVISION rather than load means promotion "
+    "would widen the blast radius from the canary slice to all traffic. "
+    "Respond with JSON only, matching the schema. Ground every claim in the "
+    "supplied evidence; do not invent metrics."
+)
+
+_CANARY_PROPOSE = (
+    "You propose exactly ONE remediation. The ONLY action available to you is "
+    "rollback_deployment; you may propose nothing else. Respond with JSON only.\n"
+    "params for rollback_deployment: {\"to_revision\": int >= 1}. OMIT to_revision "
+    "(or set it to null) to roll back to the last known-good revision. Only set a "
+    "specific number if the evidence EXPLICITLY names the target revision. Do NOT "
+    "invent a revision number.\n"
+    "Do not put service, namespace, or target inside params; those are supplied "
+    "by the system, not by you."
+)
+
+CANARY_TASK = ModelTask(
+    name="canary-verification",
+    diagnose_system=_CANARY_DIAGNOSE,
+    propose_system=_CANARY_PROPOSE,
+    allowed_actions=("rollback_deployment",),
+)
+
+
+# --- Agent 3: right-sizing -------------------------------------------------- #
+_RIGHTSIZE_DIAGNOSE = (
+    "You are an SRE right-sizing a workload. You receive a firing alert and a "
+    "fixed sweep of evidence: 7-day p95 CPU vs request, 7-day p95 memory vs "
+    "request, current requests and limits, and 7-day peak memory. Diagnose "
+    "whether the workload reserves materially more than it uses, and by how "
+    "much. Respond with JSON only, matching the schema. Ground every claim in "
+    "the supplied evidence; do not invent metrics."
+)
+
+_RIGHTSIZE_PROPOSE = (
+    "You propose exactly ONE remediation. The ONLY action available to you is "
+    "patch_deployment_resources; you may propose nothing else. Respond with JSON "
+    "only.\n"
+    "params for patch_deployment_resources: {\"cpu_request_millicores\": int, "
+    "\"memory_request_mib\": int, optional \"cpu_limit_millicores\": int, optional "
+    "\"memory_limit_mib\": int}.\n"
+    "Set requests to the observed p95 usage PLUS roughly 30% headroom, NEVER to "
+    "the raw p95, so a normal spike is still covered. Never set a request below a "
+    "level that the 7-day PEAK would breach. Units: CPU in millicores (500m = "
+    "500), memory in MiB (512Mi = 512).\n"
+    "Do not put service, namespace, or target inside params; those are supplied "
+    "by the system, not by you."
+)
+
+RIGHTSIZE_TASK = ModelTask(
+    name="right-sizing",
+    diagnose_system=_RIGHTSIZE_DIAGNOSE,
+    propose_system=_RIGHTSIZE_PROPOSE,
+    allowed_actions=("patch_deployment_resources",),
+)
+
+
+class ModelEmptyResponse(Exception):
+    """The model returned an empty/whitespace body. For a reasoning model this
+    usually means the token budget was spent on the internal 'reasoning' channel
+    before any 'content' was emitted. Treated as a failed parse so the retry (or
+    a clean escalation) takes over, never passed downstream as a valid answer."""
+
+
+class ModelResponseError(Exception):
+    """The model failed to produce a valid, schema-conforming answer even after
+    one repair attempt. Raised so the caller escalates to a human, rather than
+    letting a raw JSONDecodeError propagate. A self-correcting boundary must also
+    be fail-SAFE: when the correction fails, it fails cleanly and legibly."""
 
 
 class OllamaBackend:
-    """qwen3.5:9b via the local OpenAI-compatible endpoint."""
+    """qwen3.5:9b via the local OpenAI-compatible endpoint. One class, many
+    specialists: the ModelTask supplies the per-specialist framing and action
+    whitelist; the machinery is shared and identical."""
 
     def __init__(
         self,
+        task: ModelTask = RCA_TASK,
         model: str = "qwen3.5:9b",
         base_url: str = "http://localhost:11434/v1",
         api_key: str = "ollama",
+        max_tokens: int = 3000,
+        timeout: float = 90.0,
     ):
         from openai import OpenAI  # lazy: the offline path needs no openai install
 
+        self.task = task
         self.model = model
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
+        # Three backstops, learned the hard way from the server log:
+        #   reasoning    qwen3.5 is a REASONING model. Left on, it spends the
+        #     token budget on an internal monologue and leaves 'content' empty.
+        #     The `/no_think` directive in _raw suppresses it at the template
+        #     level (the API think:false flag is ignored on this build).
+        #   max_tokens   caps OUTPUT. The first cut was 800, which starved even
+        #     the answer on a reasoning model; 3000 fits reasoning-plus-JSON yet
+        #     is ~7x below the 22k-token runaway that pinned the GPU for 9 min.
+        #   timeout      caps WALL CLOCK, the ultimate backstop: a stall or a
+        #     full-cap generation fails fast instead of holding the GPU.
+        self.max_tokens = max_tokens
+        self.client = OpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
 
     def _raw(self, system: str, user: str, schema: dict, name: str) -> str:
-        """One structured call. Try json_schema; fall back to json_object."""
-        def call(sys_msg: str, fmt: dict) -> str:
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                temperature=0,
-                messages=[
-                    {"role": "system", "content": sys_msg},
-                    {"role": "user", "content": user},
-                ],
-                response_format=fmt,
-            )
-            return resp.choices[0].message.content
+        """One structured call over the /v1 contract. We request a json_object
+        and put the schema in the system prompt: on this Ollama build json_object
+        is honored reliably, whereas the strict json_schema response_format came
+        back with empty content.
 
-        try:
-            return call(system, {"type": "json_schema",
-                                 "json_schema": {"name": name, "schema": schema}})
-        except Exception:
-            return call(system + "\nJSON schema: " + json.dumps(schema),
-                        {"type": "json_object"})
+        Reasoning control: qwen3.5 is a reasoning model, and on this build the
+        OpenAI-style `think:false` body flag is SILENTLY IGNORED (proven: a call
+        with it set still produced 12k chars of reasoning and hit the token cap
+        with empty content). The lever this build DOES honor is the `/no_think`
+        directive in the prompt itself, which suppresses reasoning at the chat-
+        template level. With it, the same call returns correct content in ~12
+        tokens. So we prepend `/no_think` rather than trust the flag.
+
+        An empty/whitespace body is raised as ModelEmptyResponse so it is handled
+        as a failed parse, never returned as a valid answer."""
+        sys_msg = (
+            "/no_think\n" + system +
+            "\nRespond with JSON only, matching this schema "
+            "(no prose, no markdown fences): " + json.dumps(schema)
+        )
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            temperature=0,
+            max_tokens=self.max_tokens,
+            messages=[
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user},
+            ],
+            response_format={"type": "json_object"},
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        if not content:
+            finish = resp.choices[0].finish_reason
+            raise ModelEmptyResponse(
+                f"empty content for {name} (finish_reason={finish}); "
+                "reasoning likely consumed the token budget"
+            )
+        return content
 
     def _ask_and_build(
         self, system: str, user: str, schema: dict, name: str, build: Callable[[dict], T]
     ) -> T:
-        """Ask, parse, and validate into a contract. On a JSON error OR a schema
-        validation error, feed the exact error back and retry once. If the retry
-        still fails, the exception propagates (the loop's low-confidence path and
-        the human gate are the backstop)."""
-        raw = self._raw(system, user, schema, name)
+        """Ask, parse, and validate into a contract. On an empty body, bad JSON,
+        or a schema validation error, feed the exact problem back and retry ONCE.
+        If the retry also fails, raise a clean ModelResponseError so the caller
+        escalates to a human, rather than letting a raw decode error propagate.
+        A self-correcting boundary must also be fail-safe: when the correction
+        fails, it fails cleanly."""
+        recoverable = (ModelEmptyResponse, json.JSONDecodeError, ValidationError)
+
+        def attempt(u: str) -> T:
+            raw = self._raw(system, u, schema, name)   # may raise ModelEmptyResponse
+            return build(json.loads(raw))              # may raise JSONDecodeError/ValidationError
+
         try:
-            return build(json.loads(raw))
-        except (json.JSONDecodeError, ValidationError) as err:
+            return attempt(user)
+        except recoverable as err:
             repair = (
                 f"{user}\n\nYour previous reply was rejected:\n{err}\n"
-                "Return corrected JSON only, obeying the params rules exactly."
+                "Return corrected JSON only, obeying the rules exactly. No prose."
             )
-            raw = self._raw(system, repair, schema, name)
-            return build(json.loads(raw))
+            try:
+                return attempt(repair)
+            except recoverable as err2:
+                raise ModelResponseError(
+                    f"model failed to produce valid {name} after one repair: {err2}"
+                ) from err2
 
     def diagnose(self, alert: Alert, evidence: list[Evidence]) -> Diagnosis:
         ev = "\n".join(f"- [{e.source}] {e.query} -> {e.finding}" for e in evidence)
@@ -220,7 +375,7 @@ class OllamaBackend:
         )
         # Evidence is OUR ground truth, injected here, not restated by the model.
         return self._ask_and_build(
-            _DIAGNOSE_SYSTEM, user, _DIAGNOSE_SCHEMA, "diagnosis",
+            self.task.diagnose_system, user, _DIAGNOSE_SCHEMA, "diagnosis",
             lambda d: Diagnosis(evidence=evidence, **d),
         )
 
@@ -230,11 +385,12 @@ class OllamaBackend:
             f"ROOT CAUSE: {diagnosis.root_cause}\n"
             f"BLAST RADIUS: {diagnosis.blast_radius}"
         )
-        # The loop pins WHERE (target/namespace) from the validated alert;
-        # the model only chooses WHAT among whitelisted actions, with params
-        # that must satisfy the per-action contract in contracts.py.
+        # The loop pins WHERE (target/namespace) from the validated alert; the
+        # model only chooses WHAT among THIS specialist's whitelisted actions,
+        # with params that must satisfy the per-action contract in contracts.py.
         return self._ask_and_build(
-            _PROPOSE_SYSTEM, user, _PROPOSE_SCHEMA, "proposed_patch",
+            self.task.propose_system, user, _propose_schema(self.task.allowed_actions),
+            "proposed_patch",
             lambda d: ProposedPatch(target=alert.service, namespace=alert.namespace, **d),
         )
 
@@ -282,7 +438,6 @@ class CanaryDeterministicBackend:
                 "radius. Rolling back is reversible and lower risk than shipping a "
                 "known-bad release."
             ),
-            risk="medium",
         )
 
 
@@ -324,5 +479,4 @@ class RightSizingDeterministicBackend:
                 "OOM. Requests are lowered deliberately with headroom, not to the raw "
                 "p95, so a normal spike is still covered."
             ),
-            risk="low",
         )

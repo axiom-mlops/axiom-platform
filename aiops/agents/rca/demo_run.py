@@ -4,7 +4,7 @@ Run as a module from the directory that CONTAINS the rca package
 (i.e. sre/aiops/agents):
 
   python -m rca.demo_run            # three incidents, deterministic backends
-  python -m rca.demo_run ollama     # RCA agent on real qwen3.5:9b, others deterministic
+  python -m rca.demo_run ollama     # all three specialists on real qwen3.5:9b
 
 Each incident is routed to the specialist that owns its alert class, then driven
 through the shared chassis (Diagnostician -> Planner -> gate -> Executor).
@@ -44,7 +44,7 @@ def sample_alerts() -> list[Alert]:
 def main() -> None:
     use_model = len(sys.argv) > 1 and sys.argv[1] == "ollama"
     registry = build_registry(use_model=use_model)
-    mode = "ollama (RCA on qwen3.5:9b)" if use_model else "deterministic"
+    mode = "ollama (all three on qwen3.5:9b)" if use_model else "deterministic"
     print(f"=== Agentic AIOps platform: 3 specialists, {mode} ===")
     print(f"Registered agents: {', '.join(a.name for a in registry)}\n")
 

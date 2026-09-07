@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mempressure
+  namespace: boutique
+  labels: { app: mempressure }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: mempressure }
+  template:
+    metadata:
+      labels: { app: mempressure }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: mempressure
+          image: mempressure:demo
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: { cpu: 200m, memory: 128Mi }
+            limits:   { cpu: 1500m, memory: 384Mi }   # CPU headroom so zero-fill never starves the probe
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 15            # slower cadence: a brief CPU stall cannot rack up failures
+            timeoutSeconds: 5            # more time to answer while busy
+            failureThreshold: 6          # tolerate several slow polls before killing
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mempressure
+  namespace: boutique
+spec:
+  selector: { app: mempressure }
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mempressure
+  namespace: boutique
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mempressure
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 90 }

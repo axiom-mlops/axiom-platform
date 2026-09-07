@@ -75,3 +75,20 @@ def test_rollback_defaults_to_previous():
     p = ProposedPatch(action="rollback_deployment", target="c", namespace="b",
                       params={}, rationale="t", risk="medium")
     assert p.params == {"to_revision": None}
+
+
+def test_risk_is_system_assigned_overriding_input():
+    # Finding from Block B drift analysis: the model scored a rollback "low".
+    # Risk is a property of the action, not the model's opinion, so even a patch
+    # constructed with risk="low" must come out "medium" for a rollback.
+    p = ProposedPatch(action="rollback_deployment", target="c", namespace="b",
+                      params={}, rationale="t", risk="low")
+    assert p.risk == "medium"
+
+
+def test_risk_assigned_when_not_supplied():
+    # The model no longer supplies risk at all; the boundary fills it from policy.
+    p = ProposedPatch(action="patch_hpa_add_memory_target", target="c",
+                      namespace="b", params={"memory_target_average_utilization": 70},
+                      rationale="t")
+    assert p.risk == "low"

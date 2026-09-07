@@ -96,14 +96,24 @@ def _is_rightsizing(a: Alert) -> bool:
 
 
 def build_registry(use_model: bool = False) -> list[Agent]:
-    """The three specialists. use_model swaps the RCA agent onto the real model
-    (qwen3.5:9b) behind the same interface; agents 2 and 3 gain their real-model
-    path in Block B. Everything else is identical between modes."""
+    """The three specialists. use_model swaps all three onto the real model
+    (qwen3.5:9b) behind the same LLMBackend interface, each carrying its own
+    ModelTask (framing + narrowed action enum). Deterministic mode uses the
+    per-specialist deterministic backends as ground truth. Nothing else about
+    the agents changes between modes; only the reasoning backend does."""
     if use_model:
-        from .llm import OllamaBackend
-        rca_backend: LLMBackend = OllamaBackend()
+        from .llm import CANARY_TASK, OllamaBackend, RCA_TASK, RIGHTSIZE_TASK
+        rca_backend: LLMBackend = OllamaBackend(task=RCA_TASK)
+        canary_backend: LLMBackend = OllamaBackend(task=CANARY_TASK)
+        # Right-sizing is the densest, most numeric prompt, so even with
+        # reasoning suppressed it needs more output headroom than the others;
+        # 3000 tripped the length cap with empty content. Higher cap, still far
+        # below any runaway. (Findings-driven: see the Block B drift analysis.)
+        rightsize_backend: LLMBackend = OllamaBackend(task=RIGHTSIZE_TASK, max_tokens=5000)
     else:
         rca_backend = DeterministicBackend()
+        canary_backend = CanaryDeterministicBackend()
+        rightsize_backend = RightSizingDeterministicBackend()
 
     return [
         Agent(
@@ -117,14 +127,14 @@ def build_registry(use_model: bool = False) -> list[Agent]:
             name="canary-verification",
             description="Analyzes a canary against baseline and rolls back a bad release.",
             plan=CANARY_PLAN,
-            backend=CanaryDeterministicBackend(),
+            backend=canary_backend,
             handles=_is_canary,
         ),
         Agent(
             name="right-sizing",
             description="Aligns requests to real usage to reclaim idle reserved capacity.",
             plan=RIGHTSIZE_PLAN,
-            backend=RightSizingDeterministicBackend(),
+            backend=rightsize_backend,
             handles=_is_rightsizing,
         ),
     ]

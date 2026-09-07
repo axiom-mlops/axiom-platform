@@ -119,6 +119,19 @@ PARAMS_BY_ACTION: dict[str, type[BaseModel]] = {
     "patch_deployment_resources": PatchDeploymentResourcesParams,
 }
 
+# Risk tier is a property of the ACTION, not an opinion the model gets to hold.
+# A rollback moves live traffic between revisions: it is medium by policy, and no
+# amount of model confidence should be able to score it "low" and thereby weaken
+# the gate. So risk is system-assigned from this map, the same principle as the
+# CPU target and target/namespace being system-supplied: the model decides WHAT
+# to do; the system owns the known facts about that action.
+RISK_BY_ACTION: dict[str, str] = {
+    "patch_hpa_add_memory_target": "low",
+    "scale_deployment": "low",
+    "rollback_deployment": "medium",
+    "patch_deployment_resources": "low",
+}
+
 
 class ProposedPatch(BaseModel):
     """A concrete, human-reviewable remediation. Never free text.
@@ -139,20 +152,26 @@ class ProposedPatch(BaseModel):
     namespace: str
     params: dict
     rationale: str
-    risk: Literal["low", "medium", "high"]
+    # System-assigned from RISK_BY_ACTION in the validator below, NOT model-set.
+    # Optional here only so callers need not supply it; it is always populated
+    # after validation. Any value passed in is overwritten by policy.
+    risk: Optional[Literal["low", "medium", "high"]] = None
 
     @model_validator(mode="after")
-    def _validate_params_for_action(self) -> "ProposedPatch":
-        """Validate params against the contract for the chosen action, then
-        normalize to the canonical typed dict. Unknown keys or out-of-bounds
-        values raise here, at the boundary, before anything reaches the act
-        plane. Assignment does not re-trigger this validator (validate_assignment
-        is off by default), so the normalization is safe."""
+    def _validate_params_and_assign_risk(self) -> "ProposedPatch":
+        """Two boundary jobs. First, validate params against the contract for the
+        chosen action and normalize to the canonical typed dict; unknown keys or
+        out-of-bounds values raise here, before anything reaches the act plane.
+        Second, assign risk from policy for the action, OVERRIDING any supplied
+        value, so risk is a system property of the action and never a number the
+        model talked its way into. Assignment does not re-trigger this validator
+        (validate_assignment is off), so the mutation is safe."""
         contract = PARAMS_BY_ACTION.get(self.action)
         if contract is None:
             raise ValueError(f"no params contract registered for action {self.action!r}")
         validated = contract.model_validate(self.params)  # extra=forbid + bounds
         self.params = validated.model_dump()
+        self.risk = RISK_BY_ACTION[self.action]  # system-assigned, not model-chosen
         return self
 
 
