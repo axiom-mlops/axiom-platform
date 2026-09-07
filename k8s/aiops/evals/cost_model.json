@@ -1,0 +1,21 @@
+{
+  "_note": "Every dollar figure in RESULTS.md comes from this file. Change an assumption here and the value story recalculates. Nothing is hardcoded in the report.",
+  "assumptions_to_verify_before_quoting_externally": [
+    "frontier list prices are public list prices and change over time",
+    "self-hosted price assumes a reserved GPU already owned; marginal token cost only",
+    "incident volume is a placeholder until pulled from the real incident system"
+  ],
+  "frontier_usd_per_million_tokens": {"input": 3.0, "output": 15.0},
+  "self_hosted_usd_per_million_tokens": {
+    "input": 0.06,
+    "output": 0.06,
+    "derivation": "1x A10G at 1.01 USD/hr sustaining approx 4.8M tokens/hr at the measured batch profile"
+  },
+  "human_triage": {
+    "loaded_engineer_usd_per_hour": 95.0,
+    "baseline_manual_triage_minutes_per_incident": 42.0,
+    "assisted_triage_minutes_per_incident": 17.0,
+    "_source": "baseline is a placeholder to be replaced with the median time-to-diagnosis from the real incident record"
+  },
+  "incident_volume_per_month": 340
+}

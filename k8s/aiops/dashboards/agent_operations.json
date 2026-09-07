@@ -1,0 +1,42 @@
+{
+  "title": "Agent Operations",
+  "uid": "aiops-agent-ops",
+  "tags": ["aiops", "agents", "genai"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "description": "The agent monitored by the same LGTM stack it diagnoses. Cost per incident and time to first token are treated as golden signals alongside latency, traffic, errors and saturation.",
+  "templating": {"list": [{"name": "engine", "type": "custom", "query": "slm-local,frontier", "current": {"text": "slm-local", "value": "slm-local"}}]},
+  "panels": [
+    {"id": 1, "type": "stat", "title": "Deterministic bypass rate", "description": "Share of alerts resolved with zero model calls. The primary cost and risk control.", "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+     "targets": [{"expr": "sum(rate(aiops_incidents_total{route=\"deterministic\"}[1h])) / sum(rate(aiops_incidents_total[1h]))", "refId": "A"}],
+     "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 0.15}, {"color": "green", "value": 0.25}]}}}},
+    {"id": 2, "type": "stat", "title": "Cost per incident", "description": "Derived from gen_ai.client.token.usage and the price table. Golden signal.", "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+     "targets": [{"expr": "sum(rate(aiops_inference_cost_usd_total[1h])) / sum(rate(aiops_incidents_total[1h]))", "refId": "A"}],
+     "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 5}}},
+    {"id": 3, "type": "stat", "title": "Guardrail block rate", "description": "Proposals rejected by schema or action policy before reaching a human. Non-zero is healthy, a spike is a model regression.", "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+     "targets": [{"expr": "sum(rate(aiops_guardrail_blocks_total[1h])) / sum(rate(aiops_rca_emitted_total[1h]))", "refId": "A"}],
+     "fieldConfig": {"defaults": {"unit": "percentunit"}}},
+    {"id": 4, "type": "stat", "title": "Approval acceptance rate", "description": "Human verdict on every suggestion. The most honest quality signal in the system.", "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+     "targets": [{"expr": "sum(rate(aiops_gate_decisions_total{decision=\"approved\"}[24h])) / sum(rate(aiops_gate_decisions_total[24h]))", "refId": "A"}],
+     "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 0.6}, {"color": "green", "value": 0.8}]}}}},
+    {"id": 5, "type": "timeseries", "title": "Inference latency by quantile", "description": "gen_ai.client.operation.duration. p90 budget is 1000 ms, set by the requirement that a hypothesis arrives before a human starts debugging by hand.", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+     "targets": [
+       {"expr": "histogram_quantile(0.50, sum by (le) (rate(gen_ai_client_operation_duration_bucket{engine=\"$engine\"}[5m])))", "legendFormat": "p50", "refId": "A"},
+       {"expr": "histogram_quantile(0.90, sum by (le) (rate(gen_ai_client_operation_duration_bucket{engine=\"$engine\"}[5m])))", "legendFormat": "p90", "refId": "B"},
+       {"expr": "histogram_quantile(0.99, sum by (le) (rate(gen_ai_client_operation_duration_bucket{engine=\"$engine\"}[5m])))", "legendFormat": "p99", "refId": "C"}],
+     "fieldConfig": {"defaults": {"unit": "ms", "custom": {"drawStyle": "line", "fillOpacity": 8}}}},
+    {"id": 6, "type": "timeseries", "title": "Token usage, input vs output", "description": "Input line reflects context slicing and prefix cache hits.", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+     "targets": [
+       {"expr": "sum(rate(gen_ai_client_token_usage_total{type=\"input\"}[5m]))", "legendFormat": "input", "refId": "A"},
+       {"expr": "sum(rate(gen_ai_client_token_usage_total{type=\"output\"}[5m]))", "legendFormat": "output", "refId": "B"}],
+     "fieldConfig": {"defaults": {"unit": "short"}}},
+    {"id": 7, "type": "timeseries", "title": "Routing distribution", "description": "Where decisions are actually being made.", "gridPos": {"h": 7, "w": 12, "x": 0, "y": 13},
+     "targets": [{"expr": "sum by (route) (rate(aiops_incidents_total[5m]))", "legendFormat": "{{route}}", "refId": "A"}],
+     "fieldConfig": {"defaults": {"custom": {"drawStyle": "bars", "stacking": {"mode": "normal"}}}}},
+    {"id": 8, "type": "timeseries", "title": "Time to hypothesis vs time to resolution", "description": "The business metric. The gap between the two lines is what the human still does after the agent has finished.", "gridPos": {"h": 7, "w": 12, "x": 12, "y": 13},
+     "targets": [
+       {"expr": "histogram_quantile(0.50, sum by (le) (rate(aiops_time_to_hypothesis_seconds_bucket[30m])))", "legendFormat": "time to hypothesis p50", "refId": "A"},
+       {"expr": "histogram_quantile(0.50, sum by (le) (rate(aiops_time_to_resolution_seconds_bucket[30m])))", "legendFormat": "time to resolution p50", "refId": "B"}],
+     "fieldConfig": {"defaults": {"unit": "s"}}}
+  ]
+}

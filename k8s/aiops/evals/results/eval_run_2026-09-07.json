@@ -1,0 +1,68 @@
+{
+  "harness_version": "0.3.0",
+  "data_provenance": "SIMULATED. Golden set is hand-authored and synthetic. Engine outputs are replay fixtures representing the target operating envelope, not measurements from a served model.",
+  "runs": [
+    {
+      "engine": "replay-slm",
+      "generated_at_utc": "2026-09-07T17:53:58+00:00",
+      "incidents_total": 20,
+      "deterministic_bypass": 6,
+      "deterministic_bypass_pct": 30.0,
+      "model_invocations": 14,
+      "cause_top1_pct": 90.0,
+      "cause_top1_model_only_pct": 85.7,
+      "action_policy_pass_pct": 100.0,
+      "action_matches_golden_pct": 90.0,
+      "schema_valid_pct": 100.0,
+      "unsupported_rca_count": 0,
+      "latency_p50_ms": 612,
+      "latency_p90_ms": 932,
+      "latency_p99_ms": 1180,
+      "tokens_in_total": 20770,
+      "tokens_in_unsliced_total": 34610,
+      "context_slicing_reduction_pct": 40.0,
+      "tokens_out_total": 4199,
+      "token_cost_usd_per_run": 0.0015,
+      "token_cost_usd_per_incident": 7e-05
+    },
+    {
+      "engine": "replay-frontier",
+      "generated_at_utc": "2026-09-07T17:53:58+00:00",
+      "incidents_total": 20,
+      "deterministic_bypass": 6,
+      "deterministic_bypass_pct": 30.0,
+      "model_invocations": 14,
+      "cause_top1_pct": 95.0,
+      "cause_top1_model_only_pct": 92.9,
+      "action_policy_pass_pct": 100.0,
+      "action_matches_golden_pct": 95.0,
+      "schema_valid_pct": 95.0,
+      "unsupported_rca_count": 0,
+      "latency_p50_ms": 2560,
+      "latency_p90_ms": 3760,
+      "latency_p99_ms": 4210,
+      "tokens_in_total": 39800,
+      "tokens_in_unsliced_total": 39800,
+      "context_slicing_reduction_pct": 0.0,
+      "tokens_out_total": 6930,
+      "token_cost_usd_per_run": 0.2233,
+      "token_cost_usd_per_incident": 0.01117
+    }
+  ],
+  "value_model": {
+    "replay-slm": {
+      "minutes_saved_per_incident": 25.0,
+      "monthly_incident_volume": 340,
+      "monthly_labor_avoided_usd": 13458.33,
+      "monthly_inference_spend_usd": 0.02,
+      "monthly_net_usd": 13458.31
+    },
+    "replay-frontier": {
+      "minutes_saved_per_incident": 25.0,
+      "monthly_incident_volume": 340,
+      "monthly_labor_avoided_usd": 13458.33,
+      "monthly_inference_spend_usd": 3.8,
+      "monthly_net_usd": 13454.54
+    }
+  }
+}
