@@ -1,0 +1,37 @@
+# Guardrail: the action space is closed and cause-scoped.
+# The model does not choose from an open set of shell commands. It selects a
+# label from this map. Anything outside it is a policy violation and is blocked
+# BEFORE the human gate, so a bad generation never reaches an approver's screen.
+
+version: 1
+human_gate: required_for_all_mutating_actions
+blast_radius_cap: single_namespace
+
+allowed_actions_by_cause:
+  hpa_scaling_metric_mismatch: [propose_hpa_patch, collect_more_evidence]
+  memory_limit_exhaustion: [propose_resource_limit_change, propose_rollback, collect_more_evidence]
+  rpc_amplification: [propose_config_patch, collect_more_evidence]
+  collector_state_corruption: [propose_config_patch, collect_more_evidence]
+  cold_start_capacity_lag: [propose_config_patch, propose_scale_out, collect_more_evidence]
+  bad_release: [propose_rollback, collect_more_evidence]
+  connection_pool_saturation: [propose_config_patch, collect_more_evidence]
+  upstream_dependency_latency: [collect_more_evidence, page_human_no_action]
+  retry_storm: [propose_config_patch, collect_more_evidence]
+  pdb_blocked_drain: [propose_cordon_drain, propose_config_patch, collect_more_evidence]
+  ingest_backpressure: [propose_resource_limit_change, propose_config_patch, collect_more_evidence]
+  cpu_throttling: [propose_resource_limit_change, collect_more_evidence]
+  probe_misconfiguration: [propose_config_patch, collect_more_evidence]
+  noisy_neighbor_contention: [propose_cordon_drain, collect_more_evidence]
+  certificate_expiry: [page_human_no_action]
+  invalid_image_reference: [propose_rollback]
+  node_resource_pressure: [propose_cordon_drain]
+  alert_threshold_flap: [page_human_no_action]
+  volume_capacity_exhaustion: [propose_config_patch]
+  planned_change: [page_human_no_action]
+
+never_allowed:
+  - delete_namespace
+  - delete_pvc
+  - scale_to_zero_in_prod
+  - edit_rbac
+  - disable_alerting

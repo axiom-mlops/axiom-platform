@@ -1,0 +1,66 @@
+
+incident : INC-009  [sev3]  Frontend latency up, own CPU and memory normal
+service  : frontend
+signals  :
+   - frontend p95 2.3s
+   - self cpu 24%
+   - recommendationservice span duration p95 1.9s
+   - no errors
+
+==================================================================
+1  TRIAGE
+==================================================================
+No deterministic rule matched. Multi-signal correlation required, routing to model.
+
+==================================================================
+2  RETRIEVE
+==================================================================
+context assembled  : 2740 tokens (full window)
+after slicing      : 1640 tokens
+dropped            : 40.1%
+grounding refs     : 1 retrieved artifacts (runbooks, prior incidents)
+
+==================================================================
+3  DIAGNOSE
+==================================================================
+{
+  "incident_id": "INC-009",
+  "cause_class": "cpu_throttling",
+  "confidence": 0.82,
+  "evidence": [
+    {
+      "signal": "frontend p95 2.3s",
+      "source_ref": "promql|trace|runbook#1"
+    }
+  ],
+  "proposed_action": "propose_resource_limit_change",
+  "action_parameters": {
+    "target": "frontend",
+    "namespace": "boutique"
+  },
+  "blast_radius": "single_deployment",
+  "rollback_plan": "kubectl rollout undo deploy/frontend",
+  "requires_human_approval": true
+}
+
+engine: replay-slm   latency: 1180 ms   out tokens: 360
+
+==================================================================
+4  GUARDRAIL
+==================================================================
+contract validation : PASS
+evidence check      : PASS (1 cited)
+action policy       : PASS  (propose_resource_limit_change in ['propose_resource_limit_change', 'collect_more_evidence'])
+golden comparison   : MISS, golden says upstream_dependency_latency
+
+==================================================================
+5  HUMAN GATE
+==================================================================
+Sent to PagerDuty as an approval request. Nothing is applied until a human accepts.
+  change     : propose_resource_limit_change on frontend
+  blast      : single_deployment
+  rollback   : kubectl rollout undo deploy/frontend
+
+Note: this is one of the two known misses. It is still inside policy and still
+gated, so the cost of the model being wrong here is a rejected suggestion,
+not a bad change in the cluster. That is the whole point of the design.

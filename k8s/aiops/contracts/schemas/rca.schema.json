@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RootCauseAnalysis",
+  "description": "The only shape the diagnostician is allowed to emit. Enforced at decode time with constrained generation, then re-validated before the human gate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["incident_id", "cause_class", "confidence", "evidence", "proposed_action", "blast_radius", "rollback_plan"],
+  "properties": {
+    "incident_id": {"type": "string", "pattern": "^INC-[0-9]{3,}$"},
+    "cause_class": {"type": "string", "description": "Must be a member of the closed cause vocabulary in router/action_policy.yaml"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1, "description": "Calibration target, not a statistical confidence interval. Used only for gate thresholds."},
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Each item must cite a retrieved artifact. An RCA with no citation is rejected as unsupported.",
+      "items": {
+        "type": "object",
+        "required": ["signal", "source_ref"],
+        "properties": {
+          "signal": {"type": "string"},
+          "source_ref": {"type": "string", "description": "promql query, trace id, log selector, or runbook doc id"}
+        }
+      }
+    },
+    "proposed_action": {"type": "string"},
+    "action_parameters": {"type": "object"},
+    "blast_radius": {"type": "string", "enum": ["single_pod", "single_deployment", "single_namespace", "cluster"]},
+    "rollback_plan": {"type": "string", "minLength": 10},
+    "requires_human_approval": {"type": "boolean", "default": true}
+  }
+}

@@ -1,0 +1,44 @@
+# Deterministic triage layer.
+# Anything matched here NEVER reaches a model. Zero tokens, zero inference risk.
+# Rule of thumb used to decide membership: if a competent on-call engineer would
+# resolve it the same way every single time, it is code, not inference.
+
+version: 1
+default_route: model
+
+rules:
+  - id: cert-expiry
+    match: {alert_name: "CertificateExpiringSoon"}
+    cause: certificate_expiry
+    action: page_human_no_action
+    rationale: "Deterministic date arithmetic. A model adds cost and non-determinism, no accuracy."
+
+  - id: invalid-image-ref
+    match: {k8s_reason: "ImagePullBackOff", registry_error: "manifest unknown"}
+    cause: invalid_image_reference
+    action: propose_rollback
+    rationale: "Single unambiguous signal with one correct response: roll back to last known-good digest."
+
+  - id: node-disk-pressure
+    match: {node_condition: "DiskPressure", imagefs_available_pct_lt: 10}
+    cause: node_resource_pressure
+    action: propose_cordon_drain
+    rationale: "Threshold crossing with an existing runbook. No multi-signal reasoning required."
+
+  - id: alert-flap-suppression
+    match: {state_transitions_30m_gt: 8, slo_burn_rate_lt: 1.0}
+    cause: alert_threshold_flap
+    action: page_human_no_action
+    rationale: "Alert hygiene problem, not an incident. Routing it to a model manufactures work."
+
+  - id: volume-capacity
+    match: {volume_available_pct_lt: 5}
+    cause: volume_capacity_exhaustion
+    action: propose_config_patch
+    rationale: "Capacity math. Retention or expansion decision is policy-driven, not diagnostic."
+
+  - id: change-window-suppression
+    match: {active_change_record: true, scope_overlap: true}
+    cause: planned_change
+    action: page_human_no_action
+    rationale: "Correlation against the change calendar is a database join, not reasoning."

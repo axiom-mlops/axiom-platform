@@ -1,0 +1,36 @@
+# Agent chart values. Scaffold, partial.
+
+image:
+  repository: ghcr.io/axiom-mlops/aiops-agent
+  tag: "0.3.0"
+
+agent:
+  namespace: aiops
+  targetNamespace: boutique          # blast radius ceiling, enforced by RBAC as well as policy
+  humanGate:
+    enabled: true                     # never set false in any environment with real traffic
+    provider: pagerduty
+  verification:
+    windowSeconds: 300
+    autoRevertOnFailureToRecover: true
+
+model:
+  engine: replay                      # replay | vllm
+  vllm:
+    endpoint: http://vllm.aiops.svc.cluster.local:8000/v1
+    model: aiops-rca
+    guidedJsonSchema: /contracts/schemas/rca.schema.json
+
+retrieval:
+  qdrant:
+    endpoint: http://qdrant.aiops.svc.cluster.local:6333
+    collection: incidents
+  embeddings: BAAI/bge-m3
+  rerank: true
+  topK: 12
+  sliceToWindow: true
+
+telemetry:
+  otlpEndpoint: http://alloy.observability.svc.cluster.local:4317
+  semconv: gen_ai_latest_experimental
+  captureContent: false               # incident context can carry sensitive strings

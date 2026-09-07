@@ -1,0 +1,18 @@
+
+incident : INC-005  [sev3]  Ingress TLS certificate expires in 6 days
+service  : ingress-nginx
+signals  :
+   - certmanager_certificate_expiration_timestamp_seconds within 6d
+   - renewal job last success 47d ago
+
+==================================================================
+1  TRIAGE
+==================================================================
+MATCHED a deterministic rule in router/triage_rules.yaml.
+cause  : certificate_expiry
+action : page_human_no_action
+tokens : 0        latency: 38 ms        model calls: 0
+
+This is the cheapest and safest possible outcome. Roughly a third of the
+golden set exits here. Sending it to a model would add cost, latency and
+non-determinism to a decision that has exactly one correct answer.
