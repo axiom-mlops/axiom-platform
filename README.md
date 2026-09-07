@@ -158,7 +158,19 @@ chaos readiness, and a load-testing harness the environment the agents run again
 ## 🗂️ Repo Layout
 
 ```
-aiops/                          # seam between the platform and the agent layer
+aiops/                          # agentic AIOps: the agent layer itself
+├── agents/rca/                 # the reasoning loop and live cluster reads
+├── router/                     # deterministic triage + closed action policy
+├── contracts/schemas/          # the RCA contract the model emits against
+├── evals/                      # golden set, scoring harness, generated results
+├── docs/                       # design decisions, value audit, demo script
+├── finetune/                   # QLoRA config and dataset schema
+├── serving/vllm/               # serving config and model card
+├── rag/                        # retrieval config and ingestion
+├── dashboards/                 # Grafana Agent Operations dashboard
+├── infra/                      # Terraform + Helm for the EKS demo target
+├── mempressure/                # the HPA blind-spot workload the agent diagnoses
+├── tests/                      # contract and loop tests
 ├── alerts/                     # PrometheusRule the agent consumes
 ├── alerting/                   # Alertmanager route to the agent webhook
 └── rbac/                       # ServiceAccount + Role bounding the executor
