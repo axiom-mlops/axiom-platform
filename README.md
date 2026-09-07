@@ -1,5 +1,29 @@
 # axiom-platform: Reliability substrate for agentic AIOps
 
+A local Kubernetes reliability platform with a full LGTM observability stack, validated to 5,000 virtual users with HPA holding, and a multi-agent AIOps layer that diagnoses incidents on it. Deterministic triage first, a fine-tuned SLM second, a frontier model only where it earns its cost. Every proposed change is contract-validated, policy-bounded and human-gated.
+
+### Start here
+
+| If you want | Go to |
+| --- | --- |
+| The agent reasoning, guardrails and eval harness | **[`aiops/`](aiops/README.md)** |
+| Why each choice was made, and what was rejected | [`aiops/docs/DESIGN_DECISIONS.md`](aiops/docs/DESIGN_DECISIONS.md) |
+| Evaluation results and methodology | [`aiops/evals/results/RESULTS.md`](aiops/evals/results/RESULTS.md) |
+| Business framing and how value is audited | [`aiops/docs/VALUE_AUDIT.md`](aiops/docs/VALUE_AUDIT.md) |
+| The platform the agents run on | this page, below |
+| Real incidents, diagnosed and written up | [`docs/postmortems/`](docs/postmortems/) |
+
+Three commands, no dependencies beyond `python3`:
+
+```bash
+git clone https://github.com/axiom-mlops/axiom-platform.git && cd axiom-platform/aiops
+python3 agents/demo_inference.py --incident INC-001   # full agent path, five stages
+python3 agents/demo_inference.py --incident INC-009   # a known miss, contained by guardrails
+```
+
+---
+
+
 ## The problem
 
 Incident response is the most expensive toil in operations, and the expensive part is
@@ -307,7 +331,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 MIT — see [LICENSE](LICENSE).
 
-## Agentic AIOps
-
-Deterministic-first incident diagnosis with a fine-tuned SLM, closed-action
-guardrails, and a runnable evaluation harness: [`aiops/`](aiops/README.md)
