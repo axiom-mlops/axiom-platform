@@ -306,3 +306,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
+
+## Agentic AIOps
+
+Deterministic-first incident diagnosis with a fine-tuned SLM, closed-action
+guardrails, and a runnable evaluation harness: [`aiops/`](aiops/README.md)

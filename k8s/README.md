@@ -299,8 +299,3 @@ This platform is being built toward a full SRE demo environment:
 - [ ] CI/CD pipeline (GitHub Actions)
 - [ ] Alerting rules (Prometheus Alertmanager)
 - [ ] Multi-cluster federation
-
-## Agentic AIOps
-
-Deterministic-first incident diagnosis with a fine-tuned SLM, guardrails, and a
-runnable evaluation harness: [`aiops/`](aiops/README.md)
