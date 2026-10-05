@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# metrics-server is provided by the managed cluster, so it is not listed here.
+resources:
+  - ../../platform/namespaces
+  - ../../observability/lgtm
+  - ../../apps/boutique/deploy
+# Environment patches (storage class, node pool affinity, image registry) are added per cloud.
+# Vendor opt-in, for example:
+# components:
+#   - ../../observability/vendors/dynatrace
