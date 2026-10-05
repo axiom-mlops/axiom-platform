@@ -271,7 +271,7 @@ kubectl apply -f observability/lgtm/alloy/alloy.yaml
 
 info "Waiting for Alloy DaemonSet (up to 390s)..."
 alloy_ready=false
-for i in $(seq 1 78); do
+for _ in $(seq 1 78); do
   desired=$(kubectl get daemonset alloy -n observability \
     -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
   ready=$(kubectl get daemonset alloy -n observability \

@@ -15,8 +15,6 @@ set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-BRANCH_DEFAULT="main"
-REMOTE_DEFAULT="origin"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M')"
 DATE_SHORT="$(date '+%Y-%m-%d')"
 

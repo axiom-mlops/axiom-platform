@@ -205,7 +205,6 @@ cmd_run() {
 
   # Build TestRun manifest from template
   local MANIFEST="$TMPDIR_K6/${NAME}.yaml"
-  local TEMPLATE="$K6_DIR/k6-runner.yaml"
 
   # Extract the testrun.yaml section from the ConfigMap data and substitute
   # We generate it directly here so we don't depend on the template CM being

@@ -57,10 +57,8 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
-      - name: Shellcheck errors (blocking)
-        run: find scripts reliability -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
-      - name: Shellcheck warnings (report only, ratchet later)
-        run: find scripts reliability -name "*.sh" -print0 | xargs -0 shellcheck --severity=warning || true
+      - name: Shellcheck (warnings block)
+        run: find scripts reliability -name "*.sh" -print0 | xargs -0 shellcheck --severity=warning
 
   secret-scan:
     name: secret scan (gitleaks)
