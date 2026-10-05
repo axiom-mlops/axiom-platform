@@ -126,3 +126,4 @@ terraform.tfvars
 backend.hcl
 # macOS
 .DS_Store
+.obsidian/
