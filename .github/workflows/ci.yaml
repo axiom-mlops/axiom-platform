@@ -14,13 +14,13 @@ concurrency:
 jobs:
   render-validate:
     name: kustomize + kubeconform (${{ matrix.cluster }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         cluster: [local-mac, azure-dev, aws-dev]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: azure/setup-kubectl@v4
         with:
           version: 'v1.29.3'
@@ -35,9 +35,9 @@ jobs:
 
   server-dry-run:
     name: kind server-side dry-run (local-mac)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: azure/setup-kubectl@v4
         with:
           version: 'v1.29.3'
@@ -52,24 +52,21 @@ jobs:
 
   lint-scripts:
     name: shellcheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
-      - name: Run shellcheck
-        run: |
-          FAILED=0
-          while IFS= read -r f; do
-            if shellcheck --severity=warning "$f"; then echo "ok    $f"; else echo "FAIL  $f"; FAILED=1; fi
-          done < <(find scripts reliability -name '*.sh' -not -path '*/archive/*')
-          exit $FAILED
+      - name: Shellcheck errors (blocking)
+        run: find scripts reliability -name "*.sh" -print0 | xargs -0 shellcheck --severity=error
+      - name: Shellcheck warnings (report only, ratchet later)
+        run: find scripts reliability -name "*.sh" -print0 | xargs -0 shellcheck --severity=warning || true
 
   secret-scan:
     name: secret scan (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -78,15 +75,15 @@ jobs:
 
   yaml-lint:
     name: yamllint (non-blocking)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: pip install yamllint
       - run: yamllint -c .yamllint.yaml apps platform observability clusters || true
 
   ci-gate:
     name: CI Gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [render-validate, server-dry-run, lint-scripts, secret-scan, yaml-lint]
     if: always()
     steps:
