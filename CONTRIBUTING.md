@@ -83,17 +83,17 @@ for f in $(find k8s -name '*.yaml' | grep -v charts); do
 done
 
 # Full health check
-bash k8s/scripts/verify-stability.sh --short
+bash scripts/local/verify-stability.sh --short
 
 # Check node budget
-bash k8s/scripts/manage.sh budget
+bash scripts/local/manage.sh budget
 ```
 
 ---
 
 ## Adding a New Tool / Service
 
-1. Create a new directory under `k8s/observability/<tool>/` or `k8s/boutique/`
+1. Create a new directory under `observability/lgtm/<tool>/` or `apps/boutique/deploy/`
 2. Single YAML manifest per component (ConfigMap + Deployment/DaemonSet + Service)
 3. Set `priorityClassName` — observability tools get `observability-high`, node agents get `system-node-critical`
 4. Set resource `requests` and `limits` — document the math in a comment block at the top of the YAML

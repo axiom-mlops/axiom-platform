@@ -114,3 +114,16 @@ __pycache__/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+# terraform
+.terraform/
+*.tfstate*
+terraform.tfvars
+backend.hcl
+# macOS
+.DS_Store
+.obsidian/
