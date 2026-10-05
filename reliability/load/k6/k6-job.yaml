@@ -12,13 +12,13 @@
 #
 # USAGE:
 #   # Run the test
-#   kubectl apply -f k8s/scripts/k6-job.yaml
+#   kubectl apply -f reliability/load/k6/k6-job.yaml
 #
 #   # Watch live output
 #   kubectl logs -n boutique -l job-name=k6-capacity -f
 #
 #   # Clean up after
-#   kubectl delete -f k8s/scripts/k6-job.yaml
+#   kubectl delete -f reliability/load/k6/k6-job.yaml
 #
 # RESOURCE BUDGET:
 #   k6 at 2000 VU uses ~1-2 CPU and ~512Mi RAM on arm64.

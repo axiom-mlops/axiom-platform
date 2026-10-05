@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run from: ~/sre/k8s/scripts/
+# Run from: anywhere in the repo
 # Usage: ./update_grafana_dashboard.sh
 
 set -euo pipefail
@@ -8,7 +8,7 @@ GRAFANA="http://grafana.local"
 AUTH="admin:admin"
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPTS_DIR/../.." && pwd)"
-DIR="$SCRIPTS_DIR/../observability/grafana/dashboards"
+DIR="$REPO_ROOT/observability/dashboards"
 
 mkdir -p "$DIR"
 
@@ -40,7 +40,7 @@ print(json.dumps({'dashboard': db, 'meta': {'slug': data['meta']['slug']}}, inde
     done
 
 cd "$REPO_ROOT"
-git add k8s/observability/grafana/dashboards/
+git add observability/dashboards/
 git diff --cached --stat
 
 git commit -m "obs(grafana): export dashboards $(date -u +%Y-%m-%dT%H:%M)" \

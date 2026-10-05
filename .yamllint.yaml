@@ -38,5 +38,5 @@ rules:
     max-end: 1
 
 ignore: |
-  k8s/charts/
+  archive/
   docker/

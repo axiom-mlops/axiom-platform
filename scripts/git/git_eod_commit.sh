@@ -8,7 +8,7 @@
 #   bash scripts/eod-commit.sh "custom message" # override commit message
 #   bash scripts/eod-commit.sh --dry-run        # see what would be committed
 #
-# Place this file at: ~/sre/k8s/scripts/eod-commit.sh
+# Location: scripts/git/git_eod_commit.sh
 # =============================================================================
 
 set -euo pipefail
@@ -76,15 +76,21 @@ fi
 
 # Summarise which areas changed
 AREAS=()
-echo "$CHANGED_FILES" | grep -q "k8s/observability"  && AREAS+=("observability")
-echo "$CHANGED_FILES" | grep -q "k8s/boutique"        && AREAS+=("boutique")
-echo "$CHANGED_FILES" | grep -q "k8s/scripts"         && AREAS+=("scripts")
-echo "$CHANGED_FILES" | grep -q "k8s/cluster"         && AREAS+=("cluster")
+echo "$CHANGED_FILES" | grep -q "^observability/"  && AREAS+=("observability")
+echo "$CHANGED_FILES" | grep -q "^apps/"        && AREAS+=("boutique")
+echo "$CHANGED_FILES" | grep -q "^scripts/"         && AREAS+=("scripts")
+echo "$CHANGED_FILES" | grep -q "^platform/\|^clusters/"         && AREAS+=("platform")
+echo "$CHANGED_FILES" | grep -q "^infra/"       && AREAS+=("infra")
+echo "$CHANGED_FILES" | grep -q "^aiops/"       && AREAS+=("aiops")
+echo "$CHANGED_FILES" | grep -q "^reliability/" && AREAS+=("reliability")
 echo "$CHANGED_FILES" | grep -q "helm/"               && AREAS+=("helm")
 echo "$CHANGED_FILES" | grep -q "infra/"              && AREAS+=("infra")
 echo "$CHANGED_FILES" | grep -q "gitops/"             && AREAS+=("gitops")
 echo "$CHANGED_FILES" | grep -q "load-testing/"       && AREAS+=("load-testing")
 echo "$CHANGED_FILES" | grep -q "platform/"           && AREAS+=("platform")
+echo "$CHANGED_FILES" | grep -q "^infra/"       && AREAS+=("infra")
+echo "$CHANGED_FILES" | grep -q "^aiops/"       && AREAS+=("aiops")
+echo "$CHANGED_FILES" | grep -q "^reliability/" && AREAS+=("reliability")
 echo "$CHANGED_FILES" | grep -q "docs/"               && AREAS+=("docs")
 echo "$CHANGED_FILES" | grep -q "aiops/"              && AREAS+=("aiops")
 

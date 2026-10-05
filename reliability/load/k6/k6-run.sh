@@ -7,11 +7,11 @@
 # of truth for both the load shape and the k6 script.
 #
 # USAGE:
-#   bash k8s/scripts/k6-run.sh [flags]
-#   bash k8s/scripts/k6-run.sh logs        # tail latest job
-#   bash k8s/scripts/k6-run.sh status      # show all k6 jobs
-#   bash k8s/scripts/k6-run.sh stop        # delete running job
-#   bash k8s/scripts/k6-run.sh clean       # delete job + configmap
+#   bash reliability/load/k6/k6-run.sh [flags]
+#   bash reliability/load/k6/k6-run.sh logs        # tail latest job
+#   bash reliability/load/k6/k6-run.sh status      # show all k6 jobs
+#   bash reliability/load/k6/k6-run.sh stop        # delete running job
+#   bash reliability/load/k6/k6-run.sh clean       # delete job + configmap
 #
 # LOAD SHAPE FLAGS:
 #   --vus N          Peak VUs                        (default: 100)
@@ -25,25 +25,25 @@
 #
 # EXAMPLES:
 #   # Smoke — 10 VU, quick check
-#   bash k8s/scripts/k6-run.sh --vus 10 --ramp-up 30s --hold 3m --ramp-down 30s
+#   bash reliability/load/k6/k6-run.sh --vus 10 --ramp-up 30s --hold 3m --ramp-down 30s
 #
 #   # Standard capacity run to 2K
-#   bash k8s/scripts/k6-run.sh --vus 2000 --ramp-up 5m --hold 20m --ramp-down 3m
+#   bash reliability/load/k6/k6-run.sh --vus 2000 --ramp-up 5m --hold 20m --ramp-down 3m
 #
 #   # Stepped staircase to 3K (SRE demo money shot)
-#   bash k8s/scripts/k6-run.sh --vus 3000 --stepped --hold 5m
+#   bash reliability/load/k6/k6-run.sh --vus 3000 --stepped --hold 5m
 #
 #   # Spike test: baseline 1K, spike to 2K mid-test
-#   bash k8s/scripts/k6-run.sh --vus 1000 --hold 10m --spike-vus 2000 --spike-dur 2m
+#   bash reliability/load/k6/k6-run.sh --vus 1000 --hold 10m --spike-vus 2000 --spike-dur 2m
 #
 # MONITOR:
-#   bash k8s/scripts/k6-run.sh logs     # live k6 output
-#   bash k8s/scripts/k6-run.sh status   # job phase + pod state
+#   bash reliability/load/k6/k6-run.sh logs     # live k6 output
+#   bash reliability/load/k6/k6-run.sh status   # job phase + pod state
 # =============================================================================
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 NS="boutique"
 
 # ── Colours ──────────────────────────────────────────────────────────────────
@@ -118,9 +118,9 @@ case "${1:-run}" in
     echo "    --p95 N          p95 SLA ms override (default: auto)"
     echo ""
     echo "  Examples:"
-    echo "    bash k8s/scripts/k6-run.sh --vus 2000 --ramp-up 5m --hold 20m"
-    echo "    bash k8s/scripts/k6-run.sh --vus 3000 --stepped --hold 5m"
-    echo "    bash k8s/scripts/k6-run.sh --vus 1000 --spike-vus 2000 --spike-dur 2m"
+    echo "    bash reliability/load/k6/k6-run.sh --vus 2000 --ramp-up 5m --hold 20m"
+    echo "    bash reliability/load/k6/k6-run.sh --vus 3000 --stepped --hold 5m"
+    echo "    bash reliability/load/k6/k6-run.sh --vus 1000 --spike-vus 2000 --spike-dur 2m"
     exit 0 ;;
 esac
 
@@ -381,7 +381,7 @@ ok "Job created: $JOB_NAME"
 echo ""
 echo "  Live logs : kubectl logs -n $NS -l job-name=${JOB_NAME} -f"
 echo "  Watch pod : kubectl get pods -n $NS -l app=k6 -w"
-echo "  Stop      : bash k8s/scripts/k6-run.sh stop"
-echo "  Status    : bash k8s/scripts/k6-run.sh status"
+echo "  Stop      : bash reliability/load/k6/k6-run.sh stop"
+echo "  Status    : bash reliability/load/k6/k6-run.sh status"
 echo ""
 info "Grafana: open 'k6 Load Test Controller' or Golden Signals dashboard"

@@ -6,12 +6,12 @@
 # No Python, no REST API, no port-forward needed to run tests.
 #
 # Usage:
-#   bash k8s/scripts/k6-stack.sh up                         # install stack
-#   bash k8s/scripts/k6-stack.sh run --vus 500 --hold 10m   # fire test
-#   bash k8s/scripts/k6-stack.sh status                     # list TestRuns
-#   bash k8s/scripts/k6-stack.sh logs                       # tail latest test
-#   bash k8s/scripts/k6-stack.sh stop                       # kill all tests
-#   bash k8s/scripts/k6-stack.sh down                       # teardown
+#   bash reliability/load/k6/k6-stack.sh up                         # install stack
+#   bash reliability/load/k6/k6-stack.sh run --vus 500 --hold 10m   # fire test
+#   bash reliability/load/k6/k6-stack.sh status                     # list TestRuns
+#   bash reliability/load/k6/k6-stack.sh logs                       # tail latest test
+#   bash reliability/load/k6/k6-stack.sh stop                       # kill all tests
+#   bash reliability/load/k6/k6-stack.sh down                       # teardown
 #
 # Run flag reference:
 #   --vus N          Peak virtual users          (default: 100)
@@ -22,13 +22,13 @@
 #   --spike-dur DUR  Spike hold duration        (default: 30s)
 #
 # Examples:
-#   bash k8s/scripts/k6-stack.sh run --vus 1000 --ramp-up 5m --hold 20m --ramp-down 3m
-#   bash k8s/scripts/k6-stack.sh run --vus 500 --hold 10m --spike-vus 1500 --spike-dur 1m
+#   bash reliability/load/k6/k6-stack.sh run --vus 1000 --ramp-up 5m --hold 20m --ramp-down 3m
+#   bash reliability/load/k6/k6-stack.sh run --vus 500 --hold 10m --spike-vus 1500 --spike-dur 1m
 # =============================================================================
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 K6_DIR="$REPO_ROOT/k8s/observability/k6"
 TMPDIR_K6="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_K6"' EXIT
@@ -155,9 +155,9 @@ cmd_up() {
   echo ""
   ok "k6 stack is up!"
   echo ""
-  echo "  Fire a test:    bash k8s/scripts/k6-stack.sh run --vus 100 --hold 5m"
-  echo "  Watch status:   bash k8s/scripts/k6-stack.sh status"
-  echo "  Tail logs:      bash k8s/scripts/k6-stack.sh logs"
+  echo "  Fire a test:    bash reliability/load/k6/k6-stack.sh run --vus 100 --hold 5m"
+  echo "  Watch status:   bash reliability/load/k6/k6-stack.sh status"
+  echo "  Tail logs:      bash reliability/load/k6/k6-stack.sh logs"
   echo "  Grafana:        open 'k6 Load Test Controller' dashboard"
 }
 
@@ -188,7 +188,7 @@ cmd_run() {
 
   # Check operator is up
   if ! kubectl get deployment k6-operator-controller-manager -n k6-operator-system &>/dev/null; then
-    error "k6-operator not installed — run: bash k8s/scripts/k6-stack.sh up"
+    error "k6-operator not installed — run: bash reliability/load/k6/k6-stack.sh up"
   fi
   if ! kubectl rollout status deployment/k6-operator-controller-manager       -n k6-operator-system --timeout=10s &>/dev/null; then
     warn "k6-operator not fully ready but proceeding..."
@@ -381,8 +381,8 @@ case "$CMD" in
     echo "    --spike-dur DUR  Spike duration     (default: 30s)"
     echo ""
     echo "  Examples:"
-    echo "    bash k8s/scripts/k6-stack.sh run --vus 1000 --ramp-up 5m --hold 20m"
-    echo "    bash k8s/scripts/k6-stack.sh run --vus 500 --spike-vus 1500 --spike-dur 1m"
+    echo "    bash reliability/load/k6/k6-stack.sh run --vus 1000 --ramp-up 5m --hold 20m"
+    echo "    bash reliability/load/k6/k6-stack.sh run --vus 500 --spike-vus 1500 --spike-dur 1m"
     echo ""
     ;;
 esac
