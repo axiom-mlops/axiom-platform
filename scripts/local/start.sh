@@ -4,9 +4,9 @@
 # =============================================================================
 #
 # Usage:
-#   bash scripts/start.sh              # full startup
-#   bash scripts/start.sh --pf-only   # restart port-forwards only
-#   bash scripts/start.sh --verify    # re-run pipeline verification only
+#   bash scripts/local/start.sh              # full startup
+#   bash scripts/local/start.sh --pf-only   # restart port-forwards only
+#   bash scripts/local/start.sh --verify    # re-run pipeline verification only
 #
 # STARTUP ORDER (do not change — dependencies are load-bearing):
 #   0. Preflight
@@ -54,11 +54,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ "$(basename "$SCRIPT_DIR")" == "scripts" ]]; then
-  REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-else
-  REPO_ROOT="$SCRIPT_DIR"
-fi
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 MODE="${1:-}"
@@ -239,8 +235,8 @@ else
 fi
 
 section "1. PriorityClasses + Namespaces"
-kubectl apply -f namespaces/priority-classes.yaml
-kubectl apply -f namespaces/namespaces.yaml
+kubectl apply -f platform/namespaces/priority-classes.yaml
+kubectl apply -f platform/namespaces/namespaces.yaml
 info "PriorityClasses and namespaces ready ✓"
 
 section "2. metrics-server"
@@ -253,15 +249,15 @@ wait_ready_kind deployment metrics-server kube-system 120 || \
   warn "metrics-server slow — HPA targets may show <unknown> initially"
 
 section "3. Observability infrastructure (kube-state-metrics + node-exporter)"
-kubectl apply -f observability/infrastructure/infrastructure.yaml
+kubectl apply -f observability/lgtm/infrastructure/infrastructure.yaml
 kubectl rollout status deployment/kube-state-metrics -n observability \
   --timeout=120s 2>/dev/null && info "kube-state-metrics ✓" || \
   warn "kube-state-metrics slow"
 
 section "4. Core observability stack"
-kubectl apply -f observability/prometheus/prometheus.yaml
-kubectl apply -f observability/loki/loki.yaml
-kubectl apply -f observability/tempo/tempo.yaml
+kubectl apply -f observability/lgtm/prometheus/prometheus.yaml
+kubectl apply -f observability/lgtm/loki/loki.yaml
+kubectl apply -f observability/lgtm/tempo/tempo.yaml
 
 info "Waiting for Prometheus (Alloy remote_write target)..."
 wait_ready_kind deployment prometheus observability 180
@@ -271,7 +267,7 @@ kubectl rollout status deployment/loki  -n observability --timeout=120s 2>/dev/n
 kubectl rollout status deployment/tempo -n observability --timeout=120s 2>/dev/null &
 
 section "5. Alloy (trace + log collector)"
-kubectl apply -f observability/alloy/alloy.yaml
+kubectl apply -f observability/lgtm/alloy/alloy.yaml
 
 info "Waiting for Alloy DaemonSet (up to 390s)..."
 alloy_ready=false
@@ -290,7 +286,7 @@ $alloy_ready && info "Alloy ready ✓" || \
   warn "Alloy not fully ready — check: kubectl logs -n observability daemonset/alloy --tail=40"
 
 section "6. Grafana"
-kubectl apply -f observability/grafana/grafana.yaml
+kubectl apply -f observability/lgtm/grafana/grafana.yaml
 wait_ready_kind deployment grafana observability 180 || \
   warn "Grafana still pulling image — boutique will deploy now."
 
@@ -328,7 +324,7 @@ else
 fi
 
 section "8. Boutique application"
-kubectl apply -f boutique/boutique.yaml
+kubectl apply -f apps/boutique/deploy/boutique.yaml
 
 info "Waiting for Redis..."
 wait_ready_kind deployment redis boutique 60 || warn "Redis slow to start"
@@ -356,11 +352,11 @@ wait $CART_PID 2>/dev/null || warn "Cartservice may still be pulling image — H
 section "9. HPA"
 if kubectl top nodes &>/dev/null 2>&1; then
   info "metrics-server is returning data — applying HPA"
-  kubectl apply -f boutique/hpa.yaml
+  kubectl apply -f apps/boutique/deploy/hpa.yaml
   info "HPA applied ✓"
 else
   warn "metrics-server not returning data yet — applying HPA anyway"
-  kubectl apply -f boutique/hpa.yaml
+  kubectl apply -f apps/boutique/deploy/hpa.yaml
   warn "Run 'kubectl get hpa -n boutique' in 60s to verify HPA has CPU metrics"
 fi
 
@@ -416,8 +412,8 @@ echo ""
 echo "  Smoke test:  k6 run --env BASE_URL=$WORKING_URL scripts/load-test_10vusers.js"
 echo "  100 VU:      k6 run --env BASE_URL=$WORKING_URL scripts/load-test_100vusers.js"
 echo "  1000 VU:     k6 run --env BASE_URL=$WORKING_URL scripts/load-test_1000vusers.js"
-echo "  Verify:      bash scripts/verify-stability.sh --short"
-echo "  HPA watch:   bash scripts/manage.sh hpa-watch"
-echo "  Full debug:  bash scripts/manage.sh debug"
-echo "  Health:      bash scripts/manage.sh doctor"
+echo "  Verify:      bash scripts/local/verify-stability.sh --short"
+echo "  HPA watch:   bash scripts/local/manage.sh hpa-watch"
+echo "  Full debug:  bash scripts/local/manage.sh debug"
+echo "  Health:      bash scripts/local/manage.sh doctor"
 echo ""

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# scripts/find-url.sh — Find the correct frontend URL v3
+# scripts/local/find-url.sh — Find the correct frontend URL v3
 # =============================================================================
 # Docker Desktop LoadBalancer → localhost:8080 is the primary reliable path.
 # NodePort :30080 is secondary — works on some Docker Desktop versions but
@@ -20,9 +20,9 @@
 #    Previous version only accepted 200 — missed working endpoints on redirect.
 #
 # Usage:
-#   bash scripts/find-url.sh
-#   export BASE_URL=$(bash scripts/find-url.sh --export)
-#   k6 run --env BASE_URL=$(bash scripts/find-url.sh --export) scripts/load-test_10vusers.js
+#   bash scripts/local/find-url.sh
+#   export BASE_URL=$(bash scripts/local/find-url.sh --export)
+#   k6 run --env BASE_URL=$(bash scripts/local/find-url.sh --export) scripts/load-test_10vusers.js
 # =============================================================================
 
 set -uo pipefail
@@ -41,7 +41,7 @@ pod_status=$(kubectl get pods -n boutique -l app=frontend \
 
 if [[ "$pod_status" != "Running" ]]; then
   err "Frontend pod is not Running (status: $pod_status)"
-  err "Fix: bash scripts/start.sh  OR  kubectl rollout restart deployment/frontend -n boutique"
+  err "Fix: bash scripts/local/start.sh  OR  kubectl rollout restart deployment/frontend -n boutique"
   exit 1
 fi
 log "Frontend pod: Running ✓"
@@ -93,7 +93,7 @@ if [[ -z "$WORKING_URL" ]]; then
   err "  1. Frontend pod is starting up — wait 60s and retry"
   err "     (minReadySeconds=30 means the pod waits 30s after readiness probe)"
   err "  2. Docker Desktop NodePort not bound — restart Docker Desktop"
-  err "  3. Port-forward not running — run: bash scripts/start.sh --pf-only"
+  err "  3. Port-forward not running — run: bash scripts/local/start.sh --pf-only"
   err ""
   err "Quick fix: start a port-forward manually:"
   err "  kubectl port-forward -n boutique svc/frontend 8080:8080 &"

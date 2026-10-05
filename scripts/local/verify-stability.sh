@@ -12,9 +12,9 @@
 #   6. All HPA TARGETS show a real CPU percentage (not <unknown>)
 #
 # Usage:
-#   bash scripts/verify-stability.sh              # full run (1000 VU, ~30min)
-#   bash scripts/verify-stability.sh --short      # smoke (100 VU, 2min)
-#   bash scripts/verify-stability.sh --no-k6      # checks only, no load test
+#   bash scripts/local/verify-stability.sh              # full run (1000 VU, ~30min)
+#   bash scripts/local/verify-stability.sh --short      # smoke (100 VU, 2min)
+#   bash scripts/local/verify-stability.sh --no-k6      # checks only, no load test
 #
 # KEY CHANGES vs v2:
 #
@@ -42,11 +42,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ "$(basename "$SCRIPT_DIR")" == "scripts" ]]; then
-  REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-else
-  REPO_ROOT="$SCRIPT_DIR"
-fi
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 MODE="${1:-}"
@@ -129,7 +125,7 @@ echo ""
 preflight_ok=true
 for dep in prometheus grafana tempo loki kube-state-metrics; do
   if ! kubectl get deployment "$dep" -n observability &>/dev/null; then
-    fail "observability/$dep not deployed — run bash scripts/start.sh first"
+    fail "observability/$dep not deployed — run bash scripts/local/start.sh first"
     preflight_ok=false
   fi
 done
@@ -146,7 +142,7 @@ done
 
 if ! $preflight_ok; then
   echo ""
-  echo -e "${RED}Preflight failed — run bash scripts/start.sh first.${NC}"
+  echo -e "${RED}Preflight failed — run bash scripts/local/start.sh first.${NC}"
   exit 2
 fi
 info "All expected workloads present ✓"
@@ -455,10 +451,10 @@ else
   echo -e "${RED}${BOLD}  ╚══════════════════════════════════════╝${NC}"
   echo ""
   echo "  Triage commands:"
-  echo "    bash scripts/manage.sh cart-debug"
-  echo "    bash scripts/manage.sh debug"
+  echo "    bash scripts/local/manage.sh cart-debug"
+  echo "    bash scripts/local/manage.sh debug"
   echo "    kubectl logs -n observability daemonset/alloy --tail=40"
-  echo "    bash scripts/manage.sh budget"
+  echo "    bash scripts/local/manage.sh budget"
   echo "    kubectl get events -A --sort-by='.lastTimestamp' | tail -30"
   echo ""
   exit 1

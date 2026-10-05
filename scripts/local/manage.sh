@@ -4,21 +4,21 @@
 # =============================================================================
 #
 # Usage (run from repo root):
-#   bash scripts/manage.sh stop              graceful teardown (PVCs preserved)
-#   bash scripts/manage.sh nuke              full reset — deletes all data
-#   bash scripts/manage.sh status            pod + HPA + PVC + ResourceQuota status
-#   bash scripts/manage.sh debug             full diagnostic dump
-#   bash scripts/manage.sh logs <svc> [ns]   tail logs for a service
-#   bash scripts/manage.sh verify            check metrics + log pipelines
-#   bash scripts/manage.sh budget            node CPU/memory budget summary
-#   bash scripts/manage.sh cart-debug        deep-dive cartservice diagnostics
-#   bash scripts/manage.sh hpa-watch         live HPA scaling monitor (refreshes every 5s)
-#   bash scripts/manage.sh restart <svc> [ns] rolling restart a deployment
-#   bash scripts/manage.sh top               kubectl top pods for both namespaces
-#   bash scripts/manage.sh suspend           scale all to 0, free RAM (keeps PVCs/config)
-#   bash scripts/manage.sh resume            restore replicas from suspend (fast)
-#   bash scripts/manage.sh grafana-export    export Grafana UI edits to JSON files
-#   bash scripts/manage.sh doctor            health check everything in one command
+#   bash scripts/local/manage.sh stop              graceful teardown (PVCs preserved)
+#   bash scripts/local/manage.sh nuke              full reset — deletes all data
+#   bash scripts/local/manage.sh status            pod + HPA + PVC + ResourceQuota status
+#   bash scripts/local/manage.sh debug             full diagnostic dump
+#   bash scripts/local/manage.sh logs <svc> [ns]   tail logs for a service
+#   bash scripts/local/manage.sh verify            check metrics + log pipelines
+#   bash scripts/local/manage.sh budget            node CPU/memory budget summary
+#   bash scripts/local/manage.sh cart-debug        deep-dive cartservice diagnostics
+#   bash scripts/local/manage.sh hpa-watch         live HPA scaling monitor (refreshes every 5s)
+#   bash scripts/local/manage.sh restart <svc> [ns] rolling restart a deployment
+#   bash scripts/local/manage.sh top               kubectl top pods for both namespaces
+#   bash scripts/local/manage.sh suspend           scale all to 0, free RAM (keeps PVCs/config)
+#   bash scripts/local/manage.sh resume            restore replicas from suspend (fast)
+#   bash scripts/local/manage.sh grafana-export    export Grafana UI edits to JSON files
+#   bash scripts/local/manage.sh doctor            health check everything in one command
 #
 # KEY CHANGES vs v1:
 #
@@ -66,7 +66,7 @@ error()   { echo -e "${RED}✗${NC} $*"; }
 header()  { echo -e "\n${BOLD}── $* ──────────────────────────────────────${NC}"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 PF_PID_FILE="${REPO_ROOT}/.pf-pids"
 
 get_kind_for_svc() {
@@ -91,31 +91,31 @@ stop() {
   [[ -f "$PF_PID_FILE" ]] && rm -f "$PF_PID_FILE"
 
   info "Stopping Alloy (pause trace/log ingestion first)..."
-  kubectl delete -f "${REPO_ROOT}/observability/alloy/alloy.yaml" \
+  kubectl delete -f "${REPO_ROOT}/observability/lgtm/alloy/alloy.yaml" \
     --ignore-not-found 2>/dev/null || true
 
   info "Stopping boutique (stop traffic source)..."
-  kubectl delete -f "${REPO_ROOT}/boutique/hpa.yaml" \
+  kubectl delete -f "${REPO_ROOT}/apps/boutique/deploy/hpa.yaml" \
     --ignore-not-found 2>/dev/null || true
-  kubectl delete -f "${REPO_ROOT}/boutique/boutique.yaml" \
+  kubectl delete -f "${REPO_ROOT}/apps/boutique/deploy/boutique.yaml" \
     --ignore-not-found 2>/dev/null || true
 
   info "Stopping observability backends (PVCs preserved)..."
-  kubectl delete -f "${REPO_ROOT}/observability/grafana/grafana.yaml" \
+  kubectl delete -f "${REPO_ROOT}/observability/lgtm/grafana/grafana.yaml" \
     --ignore-not-found 2>/dev/null || true
-  kubectl delete -f "${REPO_ROOT}/observability/tempo/tempo.yaml" \
+  kubectl delete -f "${REPO_ROOT}/observability/lgtm/tempo/tempo.yaml" \
     --ignore-not-found 2>/dev/null || true
-  kubectl delete -f "${REPO_ROOT}/observability/loki/loki.yaml" \
+  kubectl delete -f "${REPO_ROOT}/observability/lgtm/loki/loki.yaml" \
     --ignore-not-found 2>/dev/null || true
-  kubectl delete -f "${REPO_ROOT}/observability/prometheus/prometheus.yaml" \
+  kubectl delete -f "${REPO_ROOT}/observability/lgtm/prometheus/prometheus.yaml" \
     --ignore-not-found 2>/dev/null || true
-  kubectl delete -f "${REPO_ROOT}/observability/infrastructure/infrastructure.yaml" \
+  kubectl delete -f "${REPO_ROOT}/observability/lgtm/infrastructure/infrastructure.yaml" \
     --ignore-not-found 2>/dev/null || true
 
   echo ""
   info "Stack stopped. PVCs preserved (metric + trace + log history intact)."
-  info "Restart:    bash scripts/start.sh"
-  info "Wipe data:  bash scripts/manage.sh nuke"
+  info "Restart:    bash scripts/local/start.sh"
+  info "Wipe data:  bash scripts/local/manage.sh nuke"
 }
 
 # ── nuke ──────────────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ nuke() {
     observability-high --ignore-not-found 2>/dev/null || true
 
   echo ""
-  info "Clean slate. Run 'bash scripts/start.sh' to redeploy everything."
+  info "Clean slate. Run 'bash scripts/local/start.sh' to redeploy everything."
 }
 
 # ── status ────────────────────────────────────────────────────────────────────
@@ -513,8 +513,8 @@ suspend() {
 
   echo ""
   info "Platform suspended ✓ — Docker Desktop RAM freed"
-  info "To resume:  bash scripts/manage.sh resume"
-  info "To destroy: bash scripts/manage.sh nuke"
+  info "To resume:  bash scripts/local/manage.sh resume"
+  info "To destroy: bash scripts/local/manage.sh nuke"
 }
 
 # ── resume ─────────────────────────────────────────────────────────────────────
@@ -542,7 +542,7 @@ resume() {
   fi
 
   info "Re-applying cluster infra..."
-  CLUSTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}}")/.." && pwd)/cluster"
+  CLUSTER_DIR="$REPO_ROOT/platform/metrics-server"
   if ! kubectl apply -f "$CLUSTER_DIR/metrics-server.yaml" 2>/dev/null; then
     warn "  metrics-server apply failed (immutable selector) — forcing recreate..."
     kubectl delete deployment metrics-server -n kube-system --ignore-not-found 2>/dev/null
@@ -619,7 +619,7 @@ resume() {
 
 # ── grafana-export ─────────────────────────────────────────────────────────────
 grafana_export() {
-  local out_dir="${REPO_ROOT}/observability/grafana/dashboards"
+  local out_dir="${REPO_ROOT}/observability/dashboards"
   mkdir -p "$out_dir"
 
   # Determine Grafana URL — LoadBalancer IP or localhost port-forward
@@ -644,7 +644,7 @@ for d in data:
 
   if [[ -z "$uids" ]]; then
     warn "Could not reach Grafana at $grafana_url"
-    warn "Try: bash scripts/start.sh --pf-only  then retry"
+    warn "Try: bash scripts/local/start.sh --pf-only  then retry"
     return 1
   fi
 
@@ -670,7 +670,7 @@ json.dump(out, sys.stdout, indent=2)
   echo ""
   info "$count dashboard(s) exported to $out_dir"
   warn "NEXT STEP: commit exported dashboards:"
-  warn "  git add observability/grafana/dashboards/ && git commit -m 'export: grafana dashboards'"
+  warn "  git add observability/dashboards/ && git commit -m 'export: grafana dashboards'"
 }
 
 # ── doctor ────────────────────────────────────────────────────────────────────
@@ -684,8 +684,8 @@ doctor() {
   echo ""
   echo -e "${BOLD}── Cluster ──────────────────────────────────────${NC}"
   kubectl cluster-info &>/dev/null && pass "cluster reachable" || fail "cluster unreachable — is Docker Desktop running?"
-  kubectl get ns boutique &>/dev/null && pass "boutique namespace" || fail "boutique namespace missing — run: bash scripts/start.sh"
-  kubectl get ns observability &>/dev/null && pass "observability namespace" || fail "observability namespace missing — run: bash scripts/start.sh"
+  kubectl get ns boutique &>/dev/null && pass "boutique namespace" || fail "boutique namespace missing — run: bash scripts/local/start.sh"
+  kubectl get ns observability &>/dev/null && pass "observability namespace" || fail "observability namespace missing — run: bash scripts/local/start.sh"
 
   echo ""
   echo -e "${BOLD}── Pods ─────────────────────────────────────────${NC}"
@@ -737,7 +737,7 @@ doctor() {
   elif [[ -n "$grafana_ip" ]] && curl -sf "http://${grafana_ip}:3000/api/health" -o /dev/null -m 5 2>/dev/null; then
     pass "grafana :3000 (${grafana_ip})"
   else
-    fail "grafana :3000 — run: bash scripts/start.sh --pf-only"
+    fail "grafana :3000 — run: bash scripts/local/start.sh --pf-only"
   fi
 
   if curl -sf "http://localhost:9090/-/healthy" -o /dev/null -m 5 2>/dev/null; then
@@ -745,18 +745,18 @@ doctor() {
   elif [[ -n "$prom_ip" ]] && curl -sf "http://${prom_ip}:9090/-/healthy" -o /dev/null -m 5 2>/dev/null; then
     pass "prometheus :9090 (${prom_ip})"
   else
-    fail "prometheus :9090 — run: bash scripts/start.sh --pf-only"
+    fail "prometheus :9090 — run: bash scripts/local/start.sh --pf-only"
   fi
 
   echo ""
   echo -e "${BOLD}── Port-forwards (ClusterIP) ────────────────────${NC}"
   # [v2] Only check ClusterIP port-forwards — these are the 3 that actually need forwarding
   curl -sf http://localhost:12345/-/ready -o /dev/null -m 3 && pass "alloy :12345" || \
-    fail "alloy :12345 — run: bash scripts/start.sh --pf-only"
+    fail "alloy :12345 — run: bash scripts/local/start.sh --pf-only"
   curl -sf http://localhost:3200/ready -o /dev/null -m 3 && pass "tempo :3200" || \
-    fail "tempo :3200 — run: bash scripts/start.sh --pf-only"
+    fail "tempo :3200 — run: bash scripts/local/start.sh --pf-only"
   curl -sf http://localhost:3100/ready -o /dev/null -m 3 && pass "loki :3100" || \
-    fail "loki :3100 — run: bash scripts/start.sh --pf-only"
+    fail "loki :3100 — run: bash scripts/local/start.sh --pf-only"
 
   echo ""
   echo -e "${BOLD}── Observability pipeline ───────────────────────${NC}"
@@ -809,7 +809,7 @@ case "$CMD" in
   doctor)         doctor ;;
   *)
     echo ""
-    echo -e "${BOLD}Usage: bash scripts/manage.sh <command>${NC}"
+    echo -e "${BOLD}Usage: bash scripts/local/manage.sh <command>${NC}"
     echo ""
     echo "  stop                    graceful teardown (PVCs preserved)"
     echo "  nuke                    full reset — deletes all data + PriorityClasses"
@@ -828,8 +828,8 @@ case "$CMD" in
     echo "  grafana-export          export dashboard edits to JSON files"
     echo "  doctor                  health check — cluster, pods, PVCs, pipeline"
     echo ""
-    echo "Startup:    bash scripts/start.sh"
-    echo "Stability:  bash scripts/verify-stability.sh [--short|--no-k6]"
+    echo "Startup:    bash scripts/local/start.sh"
+    echo "Stability:  bash scripts/local/verify-stability.sh [--short|--no-k6]"
     echo ""
     exit 1
     ;;

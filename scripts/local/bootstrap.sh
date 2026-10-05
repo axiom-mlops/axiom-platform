@@ -3,7 +3,7 @@
 # bootstrap.sh — SRE Demo Platform: First-Time Setup v2
 # =============================================================================
 # Run ONCE on a fresh machine before anything else.
-# After this, use: bash scripts/start.sh  (from k8s/) after every reboot.
+# After this, use: bash scripts/local/start.sh  (from k8s/) after every reboot.
 #
 # Prerequisites:
 #   1. Docker Desktop: https://www.docker.com/products/docker-desktop/
@@ -12,7 +12,7 @@
 #   2. brew install kubectl k6
 #
 # Usage (from k8s/ directory):
-#   bash scripts/bootstrap.sh
+#   bash scripts/local/bootstrap.sh
 #
 # KEY CHANGES vs v1:
 #   [v2] metrics-server source changed to cluster/metrics-server.yaml.
@@ -36,11 +36,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 die()  { echo -e "${RED}[✗]${NC} $*" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ "$(basename "$SCRIPT_DIR")" == "scripts" ]]; then
-  ROOT="$(dirname "$SCRIPT_DIR")"
-else
-  ROOT="$SCRIPT_DIR"
-fi
+ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 cd "$ROOT"
 
 echo ""
@@ -98,8 +94,8 @@ ok "local-path set as default StorageClass"
 
 # ── Phase 2: Namespaces + PriorityClasses ─────────────────────────────────────
 log "Phase 2: Creating namespaces and PriorityClasses..."
-kubectl apply -f "$ROOT/namespaces/priority-classes.yaml"
-kubectl apply -f "$ROOT/namespaces/namespaces.yaml"
+kubectl apply -f "$ROOT/platform/namespaces/priority-classes.yaml"
+kubectl apply -f "$ROOT/platform/namespaces/namespaces.yaml"
 ok "PriorityClasses + namespaces ready"
 
 # ── Phase 3: metrics-server ───────────────────────────────────────────────────
@@ -119,13 +115,13 @@ log "Phase 4: Deploying observability stack..."
 log "This pulls ~2GB of images on first run — patience..."
 
 # kube-state-metrics + node-exporter only (metrics-server is handled above)
-kubectl apply -f "$ROOT/observability/infrastructure/infrastructure.yaml"
+kubectl apply -f "$ROOT/observability/lgtm/infrastructure/infrastructure.yaml"
 kubectl rollout status deployment/kube-state-metrics -n observability --timeout=120s
 ok "kube-state-metrics + node-exporter ready"
 
-kubectl apply -f "$ROOT/observability/prometheus/prometheus.yaml"
-kubectl apply -f "$ROOT/observability/loki/loki.yaml"
-kubectl apply -f "$ROOT/observability/tempo/tempo.yaml"
+kubectl apply -f "$ROOT/observability/lgtm/prometheus/prometheus.yaml"
+kubectl apply -f "$ROOT/observability/lgtm/loki/loki.yaml"
+kubectl apply -f "$ROOT/observability/lgtm/tempo/tempo.yaml"
 
 log "Waiting for backends to be ready..."
 kubectl rollout status deployment/prometheus -n observability --timeout=180s
@@ -133,11 +129,11 @@ kubectl rollout status deployment/loki       -n observability --timeout=180s
 kubectl rollout status deployment/tempo      -n observability --timeout=180s
 ok "Prometheus, Loki, Tempo ready"
 
-kubectl apply -f "$ROOT/observability/alloy/alloy.yaml"
+kubectl apply -f "$ROOT/observability/lgtm/alloy/alloy.yaml"
 kubectl rollout status daemonset/alloy -n observability --timeout=120s
 ok "Alloy ready (OTLP collector + log shipper — DaemonSet)"
 
-kubectl apply -f "$ROOT/observability/grafana/grafana.yaml"
+kubectl apply -f "$ROOT/observability/lgtm/grafana/grafana.yaml"
 kubectl rollout status deployment/grafana -n observability --timeout=120s
 ok "Grafana ready (dashboards pre-loaded, PVC-backed)"
 
@@ -180,7 +176,7 @@ fi
 log "Phase 6: Deploying Online Boutique..."
 log "adservice (Java JVM) and cartservice (C# .NET) are slow on first pull — normal."
 
-kubectl apply -f "$ROOT/boutique/boutique.yaml"
+kubectl apply -f "$ROOT/apps/boutique/deploy/boutique.yaml"
 
 log "Waiting for frontend (this waits for all downstream services too)..."
 kubectl rollout status deployment/frontend -n boutique --timeout=480s \
@@ -189,7 +185,7 @@ ok "Online Boutique ready"
 
 log "Waiting 45s for metrics-server API to register before applying HPA..."
 sleep 45
-kubectl apply -f "$ROOT/boutique/hpa.yaml"
+kubectl apply -f "$ROOT/apps/boutique/deploy/hpa.yaml"
 ok "HPA policies applied"
 
 # ── Phase 7: Port-forwards ────────────────────────────────────────────────────
@@ -247,12 +243,12 @@ echo -e "  Next steps:"
 echo -e "    Smoke test:        k6 run scripts/load-test_10vusers.js"
 echo -e "    100 VU:            k6 run scripts/load-test_100vusers.js"
 echo -e "    1000 VU:           k6 run scripts/load-test_1000vusers.js"
-echo -e "    Stability harness: bash scripts/verify-stability.sh --short"
-echo -e "    HPA watch:         bash scripts/manage.sh hpa-watch"
-echo -e "    Full debug:        bash scripts/manage.sh debug"
+echo -e "    Stability harness: bash scripts/local/verify-stability.sh --short"
+echo -e "    HPA watch:         bash scripts/local/manage.sh hpa-watch"
+echo -e "    Full debug:        bash scripts/local/manage.sh debug"
 echo ""
-echo -e "  After every reboot:  bash scripts/start.sh"
-echo -e "  Suspend (free RAM):  bash scripts/manage.sh suspend"
-echo -e "  Resume:              bash scripts/manage.sh resume"
-echo -e "  Full reset:          bash scripts/manage.sh nuke"
+echo -e "  After every reboot:  bash scripts/local/start.sh"
+echo -e "  Suspend (free RAM):  bash scripts/local/manage.sh suspend"
+echo -e "  Resume:              bash scripts/local/manage.sh resume"
+echo -e "  Full reset:          bash scripts/local/manage.sh nuke"
 echo ""
